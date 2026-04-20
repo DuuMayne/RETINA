@@ -144,12 +144,12 @@ function showUsersPanel(appName, snapshots) {
     const panel = document.getElementById('users-panel');
     const snapBar = snapshots ? `
         <div class="snapshot-bar">
-            <h2>${esc(appName)} - Access Review</h2>
+            <h2>${esc(appName)} - Entitlement Review</h2>
             <select class="snapshot-select" onchange="loadSnapshot(this.value)">
                 ${snapshots.map(s => `<option value="${s.id}">${new Date(s.synced_at).toLocaleString()} (${s.user_count} users)</option>`).join('')}
             </select>
         </div>
-    ` : `<h2>${esc(appName)} - Access Review</h2>`;
+    ` : `<h2>${esc(appName)} - Entitlement Review</h2>`;
 
     panel.innerHTML = `
         ${snapBar}
@@ -277,7 +277,7 @@ function exportCSV() {
     const blob = new Blob([csv], { type: 'text/csv' });
     const a = document.createElement('a');
     a.href = URL.createObjectURL(blob);
-    a.download = `access_review_${new Date().toISOString().slice(0, 10)}.csv`;
+    a.download = `retina_export_${new Date().toISOString().slice(0, 10)}.csv`;
     a.click();
 }
 

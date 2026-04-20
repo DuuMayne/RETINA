@@ -12,6 +12,7 @@ wheels/
 # Secrets and data
 encryption.key
 access_review.db
+retina.db
 
 # macOS
 .DS_Store

@@ -1,4 +1,4 @@
-"""Scheduled sync engine for access review application."""
+"""Scheduled sync engine for RETINA."""
 from __future__ import annotations
 
 import asyncio
