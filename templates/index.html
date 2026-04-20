@@ -1,0 +1,84 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Access Review</title>
+    <link rel="stylesheet" href="/static/style.css">
+</head>
+<body>
+    <div class="container">
+        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:1.5rem">
+            <h1>Access Review</h1>
+            <div class="btn-group">
+                <button onclick="exportCSV()" class="secondary">Export CSV</button>
+                <button onclick="openAddModal()">+ Add Application</button>
+            </div>
+        </div>
+
+        <div id="app-list"></div>
+
+        <div id="users-panel" style="display:none;margin-top:1.5rem" class="card"></div>
+    </div>
+
+    <!-- Add Application Modal -->
+    <div id="add-modal" class="modal-overlay" onclick="if(event.target===this)closeAddModal()">
+        <div class="modal">
+            <h2>Add Application</h2>
+            <div class="form-row">
+                <div>
+                    <label>Application Name</label>
+                    <input type="text" id="app-name" placeholder="e.g. CrowdStrike Production">
+                </div>
+                <div>
+                    <label>Connector</label>
+                    <select id="conn-type" onchange="renderCredFields()"></select>
+                </div>
+            </div>
+            <div class="form-row">
+                <div>
+                    <label>Base URL (optional override)</label>
+                    <input type="text" id="base-url" placeholder="https://api.crowdstrike.com">
+                </div>
+            </div>
+            <div id="cred-fields" class="form-row"></div>
+            <div class="actions">
+                <button class="secondary" onclick="closeAddModal()">Cancel</button>
+                <button onclick="submitAddApp()">Save</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Edit Application Modal -->
+    <div id="edit-modal" class="modal-overlay" onclick="if(event.target===this)closeEditModal()">
+        <div class="modal">
+            <h2>Edit Application</h2>
+            <input type="hidden" id="edit-app-id">
+            <div class="form-row">
+                <div>
+                    <label>Application Name</label>
+                    <input type="text" id="edit-app-name">
+                </div>
+                <div>
+                    <label>Connector</label>
+                    <div id="edit-conn-type" style="padding:0.5rem 0;color:var(--text-muted);font-size:0.875rem"></div>
+                </div>
+            </div>
+            <div class="form-row">
+                <div>
+                    <label>Base URL (optional override)</label>
+                    <input type="text" id="edit-base-url">
+                </div>
+            </div>
+            <div id="edit-cred-fields" class="form-row"></div>
+            <div style="font-size:0.75rem;color:var(--text-muted);margin-top:0.25rem">Credentials are masked. Leave as-is to keep current values, or paste new ones to update.</div>
+            <div class="actions">
+                <button class="secondary" onclick="closeEditModal()">Cancel</button>
+                <button onclick="submitEditApp()">Update</button>
+            </div>
+        </div>
+    </div>
+
+    <script src="/static/app.js"></script>
+</body>
+</html>
