@@ -281,6 +281,105 @@ function exportCSV() {
     a.click();
 }
 
+// ── Cross-Reference View ──
+async function showCrossRef() {
+    const panel = document.getElementById('crossref-panel');
+    const usersPanel = document.getElementById('users-panel');
+    usersPanel.style.display = 'none';
+
+    panel.style.display = 'block';
+    panel.innerHTML = '<div class="empty"><span class="spinner"></span> Running cross-reference against Okta...</div>';
+
+    try {
+        const data = await api('GET', '/api/cross-reference');
+        renderCrossRef(data);
+    } catch (e) {
+        panel.innerHTML = `<div class="card"><p style="color:var(--danger)">${esc(e.message)}</p><p style="font-size:0.85rem;color:var(--text-muted)">Make sure you have an Okta connector configured and synced.</p></div>`;
+    }
+}
+
+function renderCrossRef(data) {
+    const panel = document.getElementById('crossref-panel');
+    const { flags_summary: flags } = data;
+
+    panel.innerHTML = `
+        <div class="card">
+            <h2>Cross-Reference: Okta Identity Baseline</h2>
+            <p style="font-size:0.85rem;color:var(--text-muted);margin-bottom:1rem">
+                Comparing ${data.total_entitlements} entitlements across ${data.apps_reviewed} applications against ${data.okta_user_count} Okta identities.
+            </p>
+
+            <div class="crossref-summary">
+                <div class="crossref-stat">
+                    <span class="crossref-num ${flags.not_in_okta > 0 ? 'danger' : ''}">${flags.not_in_okta}</span>
+                    <span class="crossref-label">Not in Okta</span>
+                </div>
+                <div class="crossref-stat">
+                    <span class="crossref-num ${flags.okta_inactive > 0 ? 'danger' : ''}">${flags.okta_inactive}</span>
+                    <span class="crossref-label">Okta Inactive</span>
+                </div>
+                <div class="crossref-stat">
+                    <span class="crossref-num ${flags.stale_access > 0 ? 'warning' : ''}">${flags.stale_access}</span>
+                    <span class="crossref-label">Stale (90+ days)</span>
+                </div>
+                <div class="crossref-stat">
+                    <span class="crossref-num ${flags.mfa_disabled > 0 ? 'warning' : ''}">${flags.mfa_disabled}</span>
+                    <span class="crossref-label">MFA Disabled</span>
+                </div>
+            </div>
+        </div>
+
+        ${data.applications.map(app => `
+            <div class="card" style="margin-top:1rem">
+                <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:0.75rem">
+                    <h3>${esc(app.app_name)} <span class="tag">${esc(app.connector_type)}</span></h3>
+                    <span style="font-size:0.8rem;color:var(--text-muted)">
+                        ${app.total_users} users &middot; <span style="color:var(--danger)">${app.flagged_users} flagged</span>
+                    </span>
+                </div>
+                ${app.flagged_users > 0 ? `
+                    <table>
+                        <thead>
+                            <tr>
+                                <th>User</th>
+                                <th>Email</th>
+                                <th>App Status</th>
+                                <th>Okta Status</th>
+                                <th>Roles</th>
+                                <th>Last Login</th>
+                                <th>Flags</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            ${app.users.filter(u => u.flags.length > 0).map(u => `
+                                <tr>
+                                    <td>${esc(u.name)}</td>
+                                    <td>${esc(u.email)}</td>
+                                    <td><span class="status-${u.app_status === 'active' ? 'active' : 'inactive'}">${esc(u.app_status)}</span></td>
+                                    <td><span class="status-${u.okta_status === 'ACTIVE' || u.okta_status === 'active' ? 'active' : 'inactive'}">${esc(u.okta_status)}</span></td>
+                                    <td>${u.roles.slice(0, 3).map(r => `<span class="tag">${esc(r)}</span>`).join(' ')}${u.roles.length > 3 ? ` <span class="tag">+${u.roles.length - 3}</span>` : ''}</td>
+                                    <td>${u.last_login ? new Date(u.last_login).toLocaleDateString() : '—'}</td>
+                                    <td>${u.flags.map(f => `<span class="flag flag-${f.startsWith('stale') || f === 'mfa_disabled' || f === 'no_login_data' ? 'warning' : 'danger'}">${esc(formatFlag(f))}</span>`).join(' ')}</td>
+                                </tr>
+                            `).join('')}
+                        </tbody>
+                    </table>
+                ` : `<p style="font-size:0.85rem;color:var(--text-muted)">No flagged users. All entitlements match Okta.</p>`}
+            </div>
+        `).join('')}
+    `;
+}
+
+function formatFlag(flag) {
+    if (flag === 'not_in_okta') return 'Not in Okta';
+    if (flag === 'okta_inactive') return 'Okta Inactive';
+    if (flag === 'mfa_disabled') return 'No MFA';
+    if (flag === 'no_login_data') return 'No login data';
+    if (flag === 'no_email') return 'No email';
+    if (flag.startsWith('stale_')) return `Stale (${flag.replace('stale_', '').replace('d', '')} days)`;
+    return flag;
+}
+
 function esc(s) {
     const d = document.createElement('div');
     d.textContent = s || '';

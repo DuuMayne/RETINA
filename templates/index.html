@@ -8,17 +8,23 @@
 </head>
 <body>
     <div class="container">
-        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:1.5rem">
-            <h1>RETINA</h1>
+        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:0.25rem">
+            <div>
+                <h1 style="margin:0">RETINA</h1>
+                <p style="margin:0.25rem 0 0 0;font-size:0.8rem;color:#666;font-weight:400">Review of Entitlements, Tokens, Identities and Networked Access</p>
+            </div>
             <div class="btn-group">
+                <button onclick="showCrossRef()" class="secondary">Cross-Reference</button>
                 <button onclick="exportCSV()" class="secondary">Export CSV</button>
                 <button onclick="openAddModal()">+ Add Application</button>
             </div>
         </div>
 
-        <div id="app-list"></div>
+        <div id="app-list" style="margin-top:1.5rem"></div>
 
         <div id="users-panel" style="display:none;margin-top:1.5rem" class="card"></div>
+
+        <div id="crossref-panel" style="display:none;margin-top:1.5rem"></div>
     </div>
 
     <!-- Add Application Modal -->

@@ -49,15 +49,24 @@ class CrowdStrikeConnector(BaseConnector):
             token = await self._get_token(client)
             headers = {"Authorization": f"Bearer {token}"}
 
-            # 1. Get all user UUIDs via user-management v2 API
+            # 1. Get all user UUIDs — try v2 first, fall back to v1
             user_ids = []
             offset = 0
+            api_version = "v2"
             while True:
                 resp = await client.get(
-                    f"{base}/user-management/queries/users/v2",
+                    f"{base}/user-management/queries/users/{api_version}",
                     headers=headers,
                     params={"offset": offset, "limit": 500},
                 )
+                # Fall back to v1 if v2 returns 404
+                if resp.status_code == 404 and api_version == "v2":
+                    api_version = "v1"
+                    resp = await client.get(
+                        f"{base}/user-management/queries/users/v1",
+                        headers=headers,
+                        params={"offset": offset, "limit": 500},
+                    )
                 resp.raise_for_status()
                 body = resp.json()
                 batch = body.get("resources", [])
@@ -73,13 +82,21 @@ class CrowdStrikeConnector(BaseConnector):
 
             # 2. Get user details in batches of 500
             users_detail = []
+            detail_endpoint = f"/user-management/entities/users/GET/{api_version}"
             for i in range(0, len(user_ids), 500):
                 chunk = user_ids[i : i + 500]
                 resp = await client.post(
-                    f"{base}/user-management/entities/users/GET/v2",
+                    f"{base}{detail_endpoint}",
                     headers=headers,
                     json={"ids": chunk},
                 )
+                # Fall back to v1 if v2 returns 404
+                if resp.status_code == 404 and api_version == "v2":
+                    resp = await client.post(
+                        f"{base}/user-management/entities/users/GET/v1",
+                        headers=headers,
+                        json={"ids": chunk},
+                    )
                 resp.raise_for_status()
                 users_detail.extend(resp.json().get("resources", []))
 

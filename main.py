@@ -269,6 +269,156 @@ async def trigger_sync_now(app_id: str, db: Session = Depends(get_db)):
     }
 
 
+# ── API: Cross-reference (Okta as identity baseline) ──
+
+@app.get("/api/cross-reference")
+async def cross_reference(db: Session = Depends(get_db)):
+    """Cross-reference all application access against Okta as the identity source.
+
+    Returns a unified view of users across all applications, with Okta as the
+    baseline. Flags users who exist in an app but not in Okta, users who haven't
+    logged in recently, and entitlements that may be unused.
+    """
+    # Find Okta application(s)
+    okta_apps = db.query(Application).filter(Application.connector_type == "okta").all()
+    if not okta_apps:
+        raise HTTPException(400, "No Okta application configured. Add an Okta connector to use cross-referencing.")
+
+    # Get latest Okta snapshot
+    okta_users_by_email = {}
+    for okta_app in okta_apps:
+        snap = (
+            db.query(AccessSnapshot)
+            .filter(AccessSnapshot.application_id == okta_app.id)
+            .order_by(AccessSnapshot.synced_at.desc())
+            .first()
+        )
+        if snap:
+            for user in snap.users:
+                email = (user.get("email") or "").lower().strip()
+                if email:
+                    okta_users_by_email[email] = user
+
+    if not okta_users_by_email:
+        raise HTTPException(400, "No Okta snapshot available. Sync your Okta connector first.")
+
+    # Get all other applications and their latest snapshots
+    all_apps = db.query(Application).filter(Application.connector_type != "okta").all()
+    cross_ref_results = []
+
+    for app_record in all_apps:
+        snap = (
+            db.query(AccessSnapshot)
+            .filter(AccessSnapshot.application_id == app_record.id)
+            .order_by(AccessSnapshot.synced_at.desc())
+            .first()
+        )
+        if not snap:
+            continue
+
+        app_users = []
+        for user in snap.users:
+            email = (user.get("email") or "").lower().strip()
+            okta_match = okta_users_by_email.get(email)
+
+            flags = []
+            if not email:
+                flags.append("no_email")
+            elif not okta_match:
+                flags.append("not_in_okta")
+            else:
+                # Check if Okta status is not active
+                okta_status = okta_match.get("status", "").lower()
+                if okta_status in ("suspended", "deprovisioned", "deactivated"):
+                    flags.append("okta_inactive")
+
+                # Check for stale access (no login in 90 days)
+                last_login = user.get("last_login", "")
+                if last_login:
+                    try:
+                        from datetime import datetime, timezone
+                        # Handle various date formats
+                        for fmt in ("%Y-%m-%dT%H:%M:%S.%fZ", "%Y-%m-%dT%H:%M:%SZ", "%Y-%m-%d"):
+                            try:
+                                login_dt = datetime.strptime(last_login[:26].rstrip("Z") + "Z", fmt if "Z" in fmt else fmt)
+                                break
+                            except ValueError:
+                                continue
+                        else:
+                            login_dt = None
+                        if login_dt:
+                            days_since = (datetime.now(timezone.utc) - login_dt.replace(tzinfo=timezone.utc)).days
+                            if days_since > 90:
+                                flags.append(f"stale_{days_since}d")
+                    except Exception:
+                        pass
+                elif email and okta_match:
+                    flags.append("no_login_data")
+
+                # Check MFA
+                mfa = user.get("mfa_enabled", user.get("two_factor_enabled", ""))
+                if mfa.lower() in ("false", "0", "no"):
+                    flags.append("mfa_disabled")
+
+            app_users.append({
+                "email": email or user.get("id", "unknown"),
+                "name": user.get("name", ""),
+                "app_status": user.get("status", ""),
+                "okta_status": okta_match.get("status", "") if okta_match else "NOT FOUND",
+                "roles": user.get("roles", []),
+                "last_login": user.get("last_login", ""),
+                "okta_last_login": okta_match.get("last_login", "") if okta_match else "",
+                "mfa_enabled": user.get("mfa_enabled", user.get("two_factor_enabled", "")),
+                "flags": flags,
+            })
+
+        cross_ref_results.append({
+            "app_id": app_record.id,
+            "app_name": app_record.name,
+            "connector_type": app_record.connector_type,
+            "total_users": len(app_users),
+            "flagged_users": len([u for u in app_users if u["flags"]]),
+            "users": app_users,
+        })
+
+    # Summary stats
+    total_unique_emails = set()
+    total_flagged = 0
+    not_in_okta_count = 0
+    okta_inactive_count = 0
+    stale_count = 0
+    mfa_disabled_count = 0
+
+    for app_result in cross_ref_results:
+        for user in app_result["users"]:
+            total_unique_emails.add(user["email"])
+            if user["flags"]:
+                total_flagged += 1
+            if "not_in_okta" in user["flags"]:
+                not_in_okta_count += 1
+            if "okta_inactive" in user["flags"]:
+                okta_inactive_count += 1
+            if any(f.startswith("stale_") for f in user["flags"]):
+                stale_count += 1
+            if "mfa_disabled" in user["flags"]:
+                mfa_disabled_count += 1
+
+    return {
+        "okta_user_count": len(okta_users_by_email),
+        "apps_reviewed": len(cross_ref_results),
+        "total_entitlements": sum(a["total_users"] for a in cross_ref_results),
+        "total_unique_users": len(total_unique_emails),
+        "total_flagged": total_flagged,
+        "flags_summary": {
+            "not_in_okta": not_in_okta_count,
+            "okta_inactive": okta_inactive_count,
+            "stale_access": stale_count,
+            "mfa_disabled": mfa_disabled_count,
+        },
+        "applications": cross_ref_results,
+    }
+
+
 if __name__ == "__main__":
     import uvicorn
     uvicorn.run("main:app", host="127.0.0.1", port=8000, reload=True)
