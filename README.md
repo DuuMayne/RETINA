@@ -6,7 +6,7 @@ A self-hosted access review tool for security and compliance teams. RETINA conne
 
 ## Features
 
-- **27 SaaS connectors** — Okta, AWS, GitHub, Google Workspace, CrowdStrike, Slack, Snowflake, and more
+- **51 SaaS connectors** — Okta, Entra ID, AWS, GitHub, Google Workspace, CrowdStrike, Salesforce, Zoom, and more
 - **Scheduled syncing** — Hourly, daily, weekly, monthly, or custom cron
 - **Cross-reference analysis** — Compare all apps against Okta as identity baseline to flag orphaned accounts, inactive users, stale access, and missing MFA
 - **Historical snapshots** — Browse and compare access state over time
@@ -18,12 +18,17 @@ A self-hosted access review tool for security and compliance teams. RETINA conne
 
 | Category | Connectors |
 |----------|-----------|
-| **Identity & Access** | Okta, Google Workspace, CrowdStrike |
-| **Cloud & Infrastructure** | AWS IAM, Cloudflare, Snowflake, Kandji, UniFi |
-| **Developer Tools** | GitHub, Docker Hub, npm, Looker, Airflow |
-| **Collaboration** | Slack, Atlassian (Jira), Zendesk |
-| **Security & Observability** | Splunk, Lacework, New Relic, HackerOne, Cisco Umbrella |
-| **Other SaaS** | SendGrid, Segment, HelloSign, Files.com, Namecheap, Experian |
+| **Identity & Access** | Okta, Microsoft Entra ID, Google Workspace, JumpCloud, CrowdStrike, Duo Security, 1Password |
+| **MDM & Endpoint** | Jamf Pro, Kandji, SentinelOne, UniFi |
+| **Cloud & Infrastructure** | AWS IAM, Cloudflare, Snowflake, MongoDB Atlas, Terraform Cloud |
+| **DevOps & Engineering** | GitHub, GitLab, Docker Hub, npm, Snyk, Airflow |
+| **Collaboration** | Slack, Atlassian (Jira), Zendesk, Zoom, Webex, Figma |
+| **Business & CRM** | Salesforce, HubSpot, DocuSign, ServiceNow |
+| **HR** | Workday, BambooHR |
+| **Security & Compliance** | Vanta, Splunk, Lacework, HackerOne, Cisco Umbrella |
+| **Observability** | Datadog, New Relic, PagerDuty, Looker |
+| **File Storage** | Box, Dropbox Business, Files.com |
+| **Other SaaS** | SendGrid, Segment, HelloSign, Namecheap, Experian |
 
 ## Quick Start
 
@@ -70,7 +75,7 @@ retina/
 ├── database.py          # SQLAlchemy models (applications, snapshots)
 ├── scheduler.py         # APScheduler for background sync jobs
 ├── crypto.py            # Fernet encryption for stored credentials
-├── connectors/          # 27 connector modules with shared interface
+├── connectors/          # 51 connector modules with shared interface
 │   ├── base.py          # Abstract BaseConnector class
 │   ├── okta.py
 │   ├── aws.py
@@ -116,4 +121,4 @@ Register it in `connectors/__init__.py` and it will appear in the UI automatical
 
 ## License
 
-Private — All rights reserved.
+Apache 2.0 with Commons Clause — see [LICENSE](LICENSE).

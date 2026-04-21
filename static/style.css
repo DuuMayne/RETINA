@@ -103,6 +103,11 @@ input:focus, select:focus { outline: none; border-color: var(--primary); }
     width: 480px;
     max-width: 90vw;
 }
+.modal.modal-wide {
+    width: 680px;
+    max-height: 85vh;
+    overflow-y: auto;
+}
 .modal h2 { margin-bottom: 1rem; color: var(--text); }
 .modal .actions { display: flex; justify-content: flex-end; gap: 0.5rem; margin-top: 1.25rem; }
 
@@ -217,4 +222,61 @@ tr:last-child td { border-bottom: none; }
 .flag-warning {
     background: rgba(245, 158, 11, 0.15);
     color: #f59e0b;
+}
+
+/* Connector picker */
+.picker-grid {
+    max-height: 320px;
+    overflow-y: auto;
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 0.75rem;
+    background: var(--bg);
+}
+
+.picker-category {
+    font-size: 0.7rem;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    color: var(--text-muted);
+    margin: 0.75rem 0 0.4rem 0;
+}
+.picker-category:first-child { margin-top: 0; }
+
+.picker-row {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.4rem;
+}
+
+.picker-item {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    color: var(--text);
+    padding: 0.35rem 0.75rem;
+    border-radius: 6px;
+    font-size: 0.8rem;
+    font-weight: 400;
+    cursor: pointer;
+    transition: all 0.15s;
+}
+.picker-item:hover {
+    border-color: var(--primary);
+    background: var(--tag-bg);
+}
+.picker-item.selected {
+    border-color: var(--primary);
+    background: rgba(108, 124, 255, 0.15);
+    color: var(--primary);
+    font-weight: 500;
+}
+
+.config-divider {
+    font-size: 0.85rem;
+    font-weight: 500;
+    color: var(--primary);
+    margin: 1.25rem 0 0.75rem 0;
+    padding-bottom: 0.5rem;
+    border-bottom: 1px solid var(--border);
 }

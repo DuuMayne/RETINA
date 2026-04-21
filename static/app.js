@@ -55,52 +55,145 @@ function renderApps() {
     `).join('');
 }
 
+// ── Connector categories ──
+const CONNECTOR_CATEGORIES = {
+    'Identity & Access': ['okta', 'entra_id', 'google_workspace', 'jumpcloud', 'duo', 'onepassword'],
+    'MDM & Endpoint': ['jamf', 'kandji', 'sentinelone', 'crowdstrike', 'unifi'],
+    'Cloud & Infrastructure': ['aws', 'cloudflare', 'snowflake', 'mongodb_atlas', 'terraform_cloud'],
+    'DevOps & Engineering': ['github', 'gitlab', 'docker_hub', 'npm', 'snyk', 'airflow'],
+    'Collaboration': ['slack', 'atlassian', 'zendesk', 'zoom', 'webex', 'figma'],
+    'Business & CRM': ['salesforce', 'hubspot', 'docusign', 'servicenow'],
+    'HR': ['workday', 'bamboohr'],
+    'Security & Compliance': ['vanta', 'splunk', 'lacework', 'hackerone', 'cisco_umbrella'],
+    'Observability': ['datadog', 'newrelic', 'pagerduty', 'looker'],
+    'File Storage': ['box', 'dropbox', 'files_com'],
+    'Other': ['sendgrid', 'segment', 'hellosign', 'namecheap', 'experian'],
+};
+
+function connectorDisplayName(key) {
+    const names = {
+        aws: 'AWS IAM', entra_id: 'Microsoft Entra ID', google_workspace: 'Google Workspace',
+        crowdstrike: 'CrowdStrike', sentinelone: 'SentinelOne', pagerduty: 'PagerDuty',
+        newrelic: 'New Relic', hackerone: 'HackerOne', cisco_umbrella: 'Cisco Umbrella',
+        docker_hub: 'Docker Hub', mongodb_atlas: 'MongoDB Atlas', terraform_cloud: 'Terraform Cloud',
+        sendgrid: 'SendGrid', hellosign: 'HelloSign', files_com: 'Files.com',
+        bamboohr: 'BambooHR', hubspot: 'HubSpot', servicenow: 'ServiceNow',
+        jumpcloud: 'JumpCloud', onepassword: '1Password', docusign: 'DocuSign',
+        npm: 'npm', gitlab: 'GitLab',
+    };
+    return names[key] || key.charAt(0).toUpperCase() + key.slice(1).replace(/_/g, ' ');
+}
+
+let selectedConnectorType = null;
+
 // ── Add app modal ──
 function openAddModal() {
     const modal = document.getElementById('add-modal');
-    const typeSelect = document.getElementById('conn-type');
-    typeSelect.innerHTML = Object.keys(connectorMeta).map(k =>
-        `<option value="${k}">${k.charAt(0).toUpperCase() + k.slice(1)}</option>`
-    ).join('');
-    renderCredFields();
+    selectedConnectorType = null;
+    document.getElementById('app-name').value = '';
+    document.getElementById('base-url').value = '';
+    document.getElementById('cred-fields').innerHTML = '';
+    document.getElementById('conn-config').style.display = 'none';
+    renderConnectorPicker('');
     modal.classList.add('active');
+    setTimeout(() => document.getElementById('conn-search').focus(), 100);
 }
 
 function closeAddModal() {
     document.getElementById('add-modal').classList.remove('active');
 }
 
-function renderCredFields() {
-    const type = document.getElementById('conn-type').value;
-    const meta = connectorMeta[type];
-    const container = document.getElementById('cred-fields');
-    const baseUrlInput = document.getElementById('base-url');
-    baseUrlInput.value = meta.default_base_url || '';
+function renderConnectorPicker(query) {
+    const grid = document.getElementById('conn-picker-grid');
+    const q = query.toLowerCase();
+    const available = Object.keys(connectorMeta);
 
+    // Build categorized list, filtering by search
+    let html = '';
+    const categorized = new Set();
+
+    for (const [category, keys] of Object.entries(CONNECTOR_CATEGORIES)) {
+        const matches = keys.filter(k => available.includes(k) && (
+            !q || k.includes(q) || connectorDisplayName(k).toLowerCase().includes(q) || category.toLowerCase().includes(q)
+        ));
+        if (!matches.length) continue;
+        matches.forEach(k => categorized.add(k));
+
+        html += `<div class="picker-category">${esc(category)}</div>`;
+        html += '<div class="picker-row">';
+        html += matches.map(k => `
+            <button type="button" class="picker-item ${selectedConnectorType === k ? 'selected' : ''}"
+                    onclick="selectConnector('${k}')">
+                ${esc(connectorDisplayName(k))}
+            </button>
+        `).join('');
+        html += '</div>';
+    }
+
+    // Uncategorized connectors
+    const uncategorized = available.filter(k => !categorized.has(k) && (
+        !q || k.includes(q) || connectorDisplayName(k).toLowerCase().includes(q)
+    ));
+    if (uncategorized.length) {
+        html += '<div class="picker-category">Other</div>';
+        html += '<div class="picker-row">';
+        html += uncategorized.map(k => `
+            <button type="button" class="picker-item ${selectedConnectorType === k ? 'selected' : ''}"
+                    onclick="selectConnector('${k}')">
+                ${esc(connectorDisplayName(k))}
+            </button>
+        `).join('');
+        html += '</div>';
+    }
+
+    if (!html) {
+        html = '<div class="empty" style="padding:1rem">No connectors match your search.</div>';
+    }
+
+    grid.innerHTML = html;
+}
+
+function selectConnector(type) {
+    selectedConnectorType = type;
+    const meta = connectorMeta[type];
+
+    // Update picker selection state
+    document.querySelectorAll('.picker-item').forEach(el => el.classList.remove('selected'));
+    event.target.classList.add('selected');
+
+    // Show config section
+    const config = document.getElementById('conn-config');
+    config.style.display = 'block';
+    document.getElementById('selected-conn-name').textContent = connectorDisplayName(type);
+    document.getElementById('base-url').value = meta.default_base_url || '';
+
+    const container = document.getElementById('cred-fields');
     container.innerHTML = meta.fields.map(f => `
         <div>
             <label>${esc(f.label)}</label>
             <input type="${f.type}" name="${f.name}" placeholder="${esc(f.label)}" required>
         </div>
     `).join('');
+
+    // Scroll config into view within modal
+    config.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
 }
 
 async function submitAddApp() {
     const name = document.getElementById('app-name').value.trim();
-    const connectorType = document.getElementById('conn-type').value;
     const baseUrl = document.getElementById('base-url').value.trim();
+
+    if (!selectedConnectorType) return alert('Select a connector first');
+    if (!name) return alert('Name is required');
 
     const credentials = {};
     document.querySelectorAll('#cred-fields input').forEach(inp => {
         credentials[inp.name] = inp.value;
     });
 
-    if (!name) return alert('Name is required');
-
     try {
-        await api('POST', '/api/applications', { name, connector_type: connectorType, credentials, base_url: baseUrl || null });
+        await api('POST', '/api/applications', { name, connector_type: selectedConnectorType, credentials, base_url: baseUrl || null });
         closeAddModal();
-        document.getElementById('app-name').value = '';
         await loadApps();
     } catch (e) {
         alert('Error: ' + e.message);

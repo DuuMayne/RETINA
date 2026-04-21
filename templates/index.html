@@ -29,28 +29,30 @@
 
     <!-- Add Application Modal -->
     <div id="add-modal" class="modal-overlay" onclick="if(event.target===this)closeAddModal()">
-        <div class="modal">
+        <div class="modal modal-wide">
             <h2>Add Application</h2>
-            <div class="form-row">
-                <div>
-                    <label>Application Name</label>
-                    <input type="text" id="app-name" placeholder="e.g. CrowdStrike Production">
+            <input type="text" id="conn-search" class="search-input" placeholder="Search connectors..." oninput="renderConnectorPicker(this.value)">
+            <div id="conn-picker-grid" class="picker-grid"></div>
+
+            <div id="conn-config" style="display:none">
+                <div class="config-divider">
+                    <span id="selected-conn-name"></span> Configuration
                 </div>
-                <div>
-                    <label>Connector</label>
-                    <select id="conn-type" onchange="renderCredFields()"></select>
+                <div class="form-row">
+                    <div>
+                        <label>Application Name</label>
+                        <input type="text" id="app-name" placeholder="e.g. CrowdStrike Production">
+                    </div>
+                    <div>
+                        <label>Base URL (optional override)</label>
+                        <input type="text" id="base-url" placeholder="https://api.example.com">
+                    </div>
                 </div>
-            </div>
-            <div class="form-row">
-                <div>
-                    <label>Base URL (optional override)</label>
-                    <input type="text" id="base-url" placeholder="https://api.crowdstrike.com">
+                <div id="cred-fields" class="form-row"></div>
+                <div class="actions">
+                    <button class="secondary" onclick="closeAddModal()">Cancel</button>
+                    <button onclick="submitAddApp()">Save</button>
                 </div>
-            </div>
-            <div id="cred-fields" class="form-row"></div>
-            <div class="actions">
-                <button class="secondary" onclick="closeAddModal()">Cancel</button>
-                <button onclick="submitAddApp()">Save</button>
             </div>
         </div>
     </div>
