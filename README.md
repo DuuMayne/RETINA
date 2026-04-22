@@ -4,6 +4,12 @@
 
 A self-hosted access review tool for security and compliance teams. RETINA connects to your SaaS applications, pulls user entitlement snapshots, and cross-references them against your identity provider to surface orphaned accounts, stale access, and compliance gaps.
 
+## Why This Exists
+
+User access reviews are a baseline requirement across SOC 2, ISO 27001, HIPAA, and PCI DSS — and they're consistently one of the most painful parts of a compliance program. Most teams run them quarterly in spreadsheets: someone exports user lists from each application, pastes them side by side, and manually checks who should still have access. It takes days, it's error-prone, and the evidence is stale by the time the auditor looks at it.
+
+RETINA was built by a GRC practitioner who got tired of doing this manually. It automates the data collection, normalizes user records across 51 platforms into a consistent schema, and runs the cross-reference analysis that would otherwise take hours with VLOOKUP. The goal isn't to replace your GRC platform — it's to eliminate the manual data gathering that makes access reviews so painful, and produce evidence that's actually current.
+
 ## Features
 
 - **51 SaaS connectors** — Okta, Entra ID, AWS, GitHub, Google Workspace, CrowdStrike, Salesforce, Zoom, and more
@@ -118,6 +124,12 @@ Register it in `connectors/__init__.py` and it will appear in the UI automatical
 - Credentials are masked in the UI and API responses
 - **RETINA does not include authentication on the web interface itself** — deploy it on a trusted network or behind a reverse proxy with auth
 - Back up your `encryption.key` file securely — without it, stored credentials cannot be decrypted
+
+## Development
+
+Designed, spec'd, and directed by a security/compliance practitioner. AI-assisted implementation using [Claude Code](https://claude.ai/code).
+
+The domain knowledge — what to build, why it matters, which APIs to connect, what the cross-reference logic should flag — comes from hands-on GRC engineering work. The implementation was accelerated with AI tooling. This is how GRC engineers build internal tooling when they understand the problem better than any vendor does.
 
 ## License
 
