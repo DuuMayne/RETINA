@@ -3,7 +3,9 @@ import os
 from pathlib import Path
 from cryptography.fernet import Fernet
 
-KEY_FILE = Path("encryption.key")
+DATA_DIR = Path(os.environ.get("RETINA_DATA_DIR", "."))
+DATA_DIR.mkdir(parents=True, exist_ok=True)
+KEY_FILE = DATA_DIR / "encryption.key"
 
 
 def _get_key() -> bytes:

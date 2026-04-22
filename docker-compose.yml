@@ -1,0 +1,14 @@
+services:
+  retina:
+    build: .
+    ports:
+      - "8000:8000"
+    volumes:
+      - retina-data:/app/data
+    environment:
+      - RETINA_DATA_DIR=/app/data
+    restart: unless-stopped
+
+volumes:
+  retina-data:
+    driver: local

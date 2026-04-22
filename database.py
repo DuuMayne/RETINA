@@ -1,8 +1,12 @@
+import os
 from sqlalchemy import create_engine, Column, String, Text, DateTime, JSON
 from sqlalchemy.orm import declarative_base, sessionmaker
 from datetime import datetime, timezone
 
-engine = create_engine("sqlite:///retina.db")
+DATA_DIR = os.environ.get("RETINA_DATA_DIR", ".")
+os.makedirs(DATA_DIR, exist_ok=True)
+
+engine = create_engine(f"sqlite:///{os.path.join(DATA_DIR, 'retina.db')}")
 SessionLocal = sessionmaker(bind=engine)
 Base = declarative_base()
 
