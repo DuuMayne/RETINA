@@ -117,7 +117,7 @@ uv run python main.py
 
 Open **[http://127.0.0.1:8000](http://127.0.0.1:8000)**.
 
-Data is stored in `./data/` by default. You can change the location with the `RETINA_DATA_DIR` environment variable.
+Data is stored in the current working directory by default (or set `RETINA_DATA_DIR` to specify a different location).
 
 ---
 
@@ -151,12 +151,10 @@ Add Okta first — it becomes the baseline identity provider for cross-reference
 
 ### Manual review (quarterly or on-demand)
 
-1. Click **Sync All** to refresh all connectors before starting a review
+1. Sync each connector individually using **Sync Now** to refresh data before starting a review
 2. Go to **Cross-Reference** in the navigation
 3. Select Okta (or your identity provider) as the baseline
 4. Review the flagged accounts in each category (orphaned, inactive, stale, MFA gap)
-5. For each flagged account, choose **Approve** (access is intentional) or **Revoke** (access should be removed)
-6. RETINA records your review decision with a timestamp for audit evidence
 
 ### What to do with flagged accounts
 
@@ -179,19 +177,17 @@ RETINA identifies issues — it doesn't take action in external systems. For eac
 | **Stale** | No login in 90+ days | Confirm with the user's team — may indicate role change or unused account |
 | **MFA gap** | User doesn't have MFA enrolled | Remediate before the next audit |
 
-### Snapshots and drift
+### Snapshots
 
-Every sync creates a timestamped snapshot. The **History** view shows you how the user list for any application has changed between snapshots — who was added, who was removed, what changed. This is the evidence you need for audit questions like "what did access look like on date X?"
+Every sync creates a timestamped snapshot. The **History** view shows historical point-in-time snapshots of the user list for any application. This is the evidence you need for audit questions like "what did access look like on date X?"
 
 ---
 
 ## 7. Scheduling automatic syncs
 
-Set each connector to sync automatically so your data stays current between reviews.
+Set each connector to sync automatically so your data stays current between reviews. Scheduling is available via the API (there is no scheduling UI in the web interface).
 
-1. Click the gear icon next to any connector
-2. Select a sync schedule: **Hourly, Daily, Weekly, Monthly**, or a custom cron expression
-3. Click **Save**
+Configure schedules using the scheduling API endpoints: **Hourly, Daily, Weekly, Monthly**, or a custom cron expression.
 
 **Recommended schedules:**
 - Identity providers (Okta, Google Workspace): Daily
@@ -202,19 +198,14 @@ Set each connector to sync automatically so your data stays current between revi
 
 ## 8. Exporting for audits
 
-RETINA generates CSV exports for any connector snapshot or cross-reference analysis.
+RETINA generates CSV exports for individual connector snapshots.
 
 **Export a connector snapshot:**
 1. Go to the connector's history view
 2. Select the snapshot date
 3. Click **Export CSV**
 
-**Export a cross-reference report:**
-1. Go to **Cross-Reference**
-2. Run the analysis
-3. Click **Export CSV**
-
-The export includes all user attributes (name, email, role, last login, MFA status) and your review decisions with timestamps — suitable for submitting as audit evidence.
+The export includes all user attributes (name, email, role, last login, MFA status) — suitable for submitting as audit evidence.
 
 ---
 
@@ -320,7 +311,7 @@ Okta isn't set as the baseline, or the Okta sync hasn't run yet. Go to **Cross-R
 
 | Variable | Default | Description |
 |---|---|---|
-| `RETINA_DATA_DIR` | `./data` | Directory for database and encryption key |
+| `RETINA_DATA_DIR` | `.` (current directory) | Directory for database and encryption key |
 
 ---
 
