@@ -7,6 +7,13 @@ services:
       - retina-data:/app/data
     environment:
       - RETINA_DATA_DIR=/app/data
+      - OKTA_DOMAIN=             # e.g. yourorg.okta.com
+      - OKTA_CLIENT_ID=
+      - OKTA_CLIENT_SECRET=
+      - APP_BASE_URL=http://localhost:8000
+      - GOOGLE_CLIENT_ID=
+      - GOOGLE_CLIENT_SECRET=
+      # SESSION_SECRET is auto-generated and saved to /app/data/session.key if not set
     restart: unless-stopped
 
 volumes:

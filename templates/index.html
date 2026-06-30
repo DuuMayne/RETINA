@@ -8,15 +8,23 @@
 </head>
 <body>
     <div class="container">
-        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:0.25rem">
-            <div>
-                <h1 style="margin:0">RETINA</h1>
-                <p style="margin:0.25rem 0 0 0;font-size:0.8rem;color:#666;font-weight:400">Review of Entitlements, Tokens, Identities and Networked Access</p>
+        <nav class="nav">
+            <div class="nav-left">
+                <h1 style="margin:0;font-size:1.25rem">RETINA</h1>
+                <a href="/" class="nav-link active">Dashboard</a>
+                <a href="/review" class="nav-link">Access Review</a>
             </div>
+            <div class="nav-right">
+                <span class="user-badge"><strong>{{ user.name }}</strong> &middot; {{ user.role }}</span>
+                <a href="/auth/logout" class="nav-link">Logout</a>
+            </div>
+        </nav>
+        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:0.25rem">
+            <p style="margin:0;font-size:0.8rem;color:#666;font-weight:400">Review of Entitlements, Tokens, Identities and Networked Access</p>
             <div class="btn-group">
                 <button onclick="showCrossRef()" class="secondary">Cross-Reference</button>
                 <button onclick="exportCSV()" class="secondary">Export CSV</button>
-                <button onclick="openAddModal()">+ Add Application</button>
+                {% if user.role == 'admin' %}<button onclick="openAddModal()">+ Add Application</button>{% endif %}
             </div>
         </div>
 

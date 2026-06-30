@@ -1,0 +1,90 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>RETINA — Login</title>
+    <link rel="stylesheet" href="/static/style.css">
+    <style>
+        .login-wrap {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            min-height: 80vh;
+            text-align: center;
+        }
+        .login-card {
+            background: var(--surface);
+            border: 1px solid var(--border);
+            border-radius: 16px;
+            padding: 2.5rem 3rem;
+            width: 380px;
+            max-width: 90vw;
+        }
+        .login-card h1 { font-size: 1.75rem; margin-bottom: 0.25rem; }
+        .login-card .sub { color: var(--text-muted); font-size: 0.8rem; margin-bottom: 2rem; }
+        .login-btn {
+            display: block;
+            width: 100%;
+            padding: 0.75rem;
+            background: var(--primary);
+            color: #fff;
+            border: none;
+            border-radius: 8px;
+            font-size: 0.95rem;
+            font-weight: 500;
+            cursor: pointer;
+            text-decoration: none;
+            transition: background 0.15s;
+            margin-bottom: 0.75rem;
+        }
+        .login-btn:hover { background: var(--primary-hover); }
+        .login-btn.google {
+            background: var(--surface);
+            border: 1px solid var(--border);
+            color: var(--text);
+        }
+        .login-btn.google:hover { background: var(--border); }
+        .divider {
+            display: flex;
+            align-items: center;
+            gap: 0.75rem;
+            margin: 0.75rem 0;
+            font-size: 0.75rem;
+            color: var(--text-muted);
+        }
+        .divider::before, .divider::after {
+            content: '';
+            flex: 1;
+            border-top: 1px solid var(--border);
+        }
+        .error-msg {
+            background: rgba(255, 77, 106, 0.12);
+            color: var(--danger);
+            border: 1px solid rgba(255, 77, 106, 0.25);
+            border-radius: 8px;
+            padding: 0.65rem 1rem;
+            margin-bottom: 1.25rem;
+            font-size: 0.85rem;
+            text-align: left;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="login-wrap">
+            <div class="login-card">
+                <h1>RETINA</h1>
+                <p class="sub">Review of Entitlements, Tokens, Identities and Networked Access</p>
+                {% if error %}
+                <div class="error-msg">{{ error }}</div>
+                {% endif %}
+                <a href="/auth/login" class="login-btn">Login with Okta</a>
+                <div class="divider">or</div>
+                <a href="/auth/google/login" class="login-btn google">Login with Google</a>
+            </div>
+        </div>
+    </div>
+</body>
+</html>

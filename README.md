@@ -40,7 +40,9 @@ Instead of manually exporting users from 15 different apps every quarter, RETINA
 - Python 3.9 or later
 - `uv` package manager (faster than pip — install with `pip install uv`)
 
-**Credentials:** You'll add API credentials for each system through RETINA's web interface — not in a configuration file. RETINA encrypts all credentials immediately when you save them.
+**Login:** RETINA requires authentication via Okta or Google. You'll need an OAuth app set up in one or both — see [Step 2a](#step-2a--configure-okta-or-google-oauth) below.
+
+**Credentials:** You'll add API credentials for each connected system through RETINA's web interface — not in a configuration file. RETINA encrypts all credentials immediately when you save them.
 
 ---
 
@@ -57,7 +59,47 @@ git clone https://github.com/DuuMayne/RETINA.git
 cd RETINA
 ```
 
-### Step 3 — Start RETINA
+### Step 2a — Configure Okta or Google OAuth
+
+RETINA requires at least one OAuth provider configured before anyone can log in.
+
+**Option A: Okta**
+
+1. In Okta Admin → **Applications** → **Create App Integration**
+2. Choose **OIDC - OpenID Connect** → **Web Application**
+3. Set **Sign-in redirect URI** to `http://your-host:8000/auth/callback`
+4. Set **Sign-out redirect URI** to `http://your-host:8000/login`
+5. Copy the **Client ID**, **Client Secret**, and your **Okta domain** (e.g. `yourorg.okta.com`)
+6. Assign the app to the users or groups who should have access
+
+**Option B: Google**
+
+1. Go to [console.cloud.google.com](https://console.cloud.google.com) → **APIs & Services** → **Credentials**
+2. **Create Credentials** → **OAuth 2.0 Client ID** → **Web application**
+3. Add to **Authorized redirect URIs**: `http://your-host:8000/auth/google/callback`
+4. Copy the **Client ID** and **Client Secret**
+5. Ensure the **Google People API** is enabled in your project
+
+Both providers can be active at the same time. Users are identified by email address regardless of which they use to log in.
+
+### Step 3 — Set environment variables
+
+Edit `docker-compose.yml` and fill in the values for the providers you configured:
+
+```yaml
+environment:
+  - RETINA_DATA_DIR=/app/data
+  - APP_BASE_URL=http://localhost:8000   # change to your actual host/domain
+  - OKTA_DOMAIN=yourorg.okta.com
+  - OKTA_CLIENT_ID=0oaxxxxxxxxxxxxxxxx
+  - OKTA_CLIENT_SECRET=xxxxxxxxxxxxxxxx
+  - GOOGLE_CLIENT_ID=xxxx.apps.googleusercontent.com
+  - GOOGLE_CLIENT_SECRET=GOCSPX-xxxxxxxx
+```
+
+Leave any provider's fields blank if you're not using it. The session signing key is auto-generated on first startup and stored in the data volume — you don't need to set it manually.
+
+### Step 4 — Start RETINA
 
 ```bash
 docker compose up -d --build
@@ -66,11 +108,9 @@ docker compose up -d --build
 - **`--build`** — builds the image the first time (takes 2–3 minutes)
 - **`-d`** — runs in the background
 
-### Step 4 — Open RETINA
+### Step 5 — Log in
 
-Go to **[http://localhost:8000](http://localhost:8000)** in any browser.
-
-Your data — the SQLite database and the encryption key — are stored in a Docker volume and persist between restarts.
+Go to **[http://localhost:8000](http://localhost:8000)** in any browser. You'll see the login screen. The first user to log in is automatically made an **admin**. Everyone who logs in after that gets the **reviewer** role.
 
 **To stop:**
 ```bash
@@ -88,7 +128,7 @@ git pull
 docker compose up -d --build
 ```
 
-> **Important:** Before updating, back up the volume containing your encryption key. Without the key, saved credentials cannot be decrypted. See [Security notes](#10-security-notes).
+> **Important:** Before updating, back up the data volume containing your encryption key and session key. Without the encryption key, saved credentials cannot be decrypted. See [Security notes](#10-security-notes).
 
 ---
 
@@ -100,8 +140,6 @@ docker compose up -d --build
 pip install uv
 ```
 
-`uv` is a fast Python package manager used by this project.
-
 ### Step 2 — Install dependencies
 
 ```bash
@@ -109,7 +147,20 @@ cd RETINA
 uv sync
 ```
 
-### Step 3 — Start RETINA
+### Step 3 — Set environment variables
+
+```bash
+export RETINA_DATA_DIR=./data
+export APP_BASE_URL=http://localhost:8000
+export OKTA_DOMAIN=yourorg.okta.com
+export OKTA_CLIENT_ID=your-client-id
+export OKTA_CLIENT_SECRET=your-client-secret
+# or for Google:
+export GOOGLE_CLIENT_ID=your-client-id
+export GOOGLE_CLIENT_SECRET=your-client-secret
+```
+
+### Step 4 — Start RETINA
 
 ```bash
 uv run python main.py
@@ -117,13 +168,11 @@ uv run python main.py
 
 Open **[http://127.0.0.1:8000](http://127.0.0.1:8000)**.
 
-Data is stored in the current working directory by default (or set `RETINA_DATA_DIR` to specify a different location).
-
 ---
 
 ## 4. Adding your first connector
 
-All credential management happens in the RETINA web interface — nothing goes in a config file.
+All credential management happens in the RETINA web interface — nothing goes in a config file. You must be logged in as an **admin** to add or edit connectors.
 
 ### Step 1 — Click "Add Application"
 
@@ -131,7 +180,7 @@ On the main dashboard, click **Add Application** in the top right.
 
 ### Step 2 — Choose your connector
 
-Select from the list of 51 supported applications. Each connector shows what credentials it needs (API token, client ID + secret, OAuth, etc.).
+Select from the list of 51 supported applications. Each connector shows what credentials it needs (API token, client ID + secret, etc.).
 
 ### Step 3 — Enter credentials
 
@@ -139,7 +188,7 @@ Fill in the required fields. RETINA encrypts these immediately when you click **
 
 ### Step 4 — Run your first sync
 
-Click **Sync Now** next to the new connector. RETINA pulls the full user list from that application and stores a snapshot.
+Click **Pull Access** next to the new connector. RETINA pulls the full user list from that application and stores a snapshot.
 
 ### Repeat for each system
 
@@ -149,12 +198,26 @@ Add Okta first — it becomes the baseline identity provider for cross-reference
 
 ## 5. Running an access review
 
-### Manual review (quarterly or on-demand)
+RETINA has two complementary review workflows.
 
-1. Sync each connector individually using **Sync Now** to refresh data before starting a review
-2. Go to **Cross-Reference** in the navigation
-3. Select Okta (or your identity provider) as the baseline
-4. Review the flagged accounts in each category (orphaned, inactive, stale, MFA gap)
+### Cross-reference analysis (automated flagging)
+
+Runs automatically across all connected systems using Okta as the baseline. It surfaces accounts that look risky so you can investigate them.
+
+1. Make sure Okta is synced — click **Pull Access** on your Okta connector
+2. Click **Cross-Reference** in the top navigation
+3. Review flagged accounts in each category
+
+### User access review (for compliance sign-off)
+
+The **Access Review** page lets any logged-in user review the full user list across all connected systems and formally approve or flag each person for removal. This produces a documented, timestamped audit trail.
+
+1. Go to **Access Review** in the top navigation
+2. Filter by application or review status (Pending / Flagged / Approved)
+3. Click **Flag** to mark a user for removal (add a note explaining why)
+4. Click **Approve** to confirm access is appropriate
+5. Flagged users appear in the **Audit Log** tab with the reviewer's name and timestamp
+6. Click **Export CSV** to download the full review record for your auditor
 
 ### What to do with flagged accounts
 
@@ -177,6 +240,15 @@ RETINA identifies issues — it doesn't take action in external systems. For eac
 | **Stale** | No login in 90+ days | Confirm with the user's team — may indicate role change or unused account |
 | **MFA gap** | User doesn't have MFA enrolled | Remediate before the next audit |
 
+### User roles
+
+| Role | What they can do |
+|---|---|
+| **Admin** | Add/edit/delete connectors, manage schedules, view all data, flag/approve users, manage RETINA user roles |
+| **Reviewer** | View all connected system data, flag and approve users in access reviews, export review reports |
+
+The first user to log in becomes an admin. Admins can promote or demote other users.
+
 ### Snapshots
 
 Every sync creates a timestamped snapshot. The **History** view shows historical point-in-time snapshots of the user list for any application. This is the evidence you need for audit questions like "what did access look like on date X?"
@@ -198,14 +270,20 @@ Configure schedules using the scheduling API endpoints: **Hourly, Daily, Weekly,
 
 ## 8. Exporting for audits
 
-RETINA generates CSV exports for individual connector snapshots.
+RETINA produces two types of export.
 
-**Export a connector snapshot:**
-1. Go to the connector's history view
+**Connector snapshot export (raw data)**
+1. Click **History** on any connector
 2. Select the snapshot date
 3. Click **Export CSV**
 
-The export includes all user attributes (name, email, role, last login, MFA status) — suitable for submitting as audit evidence.
+The export includes all user attributes (name, email, role, last login, MFA status).
+
+**Access review export (compliance evidence)**
+1. Go to **Access Review**
+2. Click **Export CSV**
+
+This export contains every review decision — who was flagged, who approved, who the reviewer was, and when. This is the artifact you give to an auditor to demonstrate that a formal access review was conducted.
 
 ---
 
@@ -245,13 +323,17 @@ SendGrid, Segment, HelloSign, Namecheap, Experian
 
 ## 10. Security notes
 
+**Authentication required.** RETINA uses Okta or Google OAuth for login. No one can access the application without authenticating through one of the configured providers. Access is controlled at the IdP level — deprovisioning a user in Okta or Google immediately blocks their login.
+
 **Credentials are encrypted at rest.** RETINA generates a Fernet encryption key on first startup and uses it to encrypt all API credentials before writing them to the database. The key is stored at `{RETINA_DATA_DIR}/encryption.key` with restricted file permissions.
 
-**Back up your encryption key.** If you lose `encryption.key`, you cannot decrypt saved credentials and will need to re-enter them all. Back it up to a secure location separate from the database.
+**Session cookies are signed.** Login sessions use HMAC-SHA256 signed cookies. The signing key is auto-generated and stored at `{RETINA_DATA_DIR}/session.key`. You can set `SESSION_SECRET` as an environment variable instead if you prefer to manage it yourself.
 
-**No built-in authentication.** RETINA does not have a login screen. Deploy it on a trusted internal network, behind a VPN, or with a reverse proxy that handles authentication (e.g. Cloudflare Access, nginx + basic auth). Do not expose it directly to the internet.
+**Back up your data directory.** The `encryption.key` and `session.key` files must be backed up separately from the database. If you lose `encryption.key`, you cannot decrypt saved credentials and will need to re-enter them all.
 
 **Credentials are masked in the UI.** Once saved, API keys and secrets are shown only as `***` — they cannot be retrieved through the interface.
+
+**Audit log.** Every login, flag, and approval decision is recorded in an immutable audit log with the actor's email and timestamp. The log is included in the access review CSV export.
 
 ---
 
@@ -268,12 +350,20 @@ If `retina` isn't listed as `Up`:
 docker compose up -d
 ```
 
+### Login redirects back to the login page with no error
+
+The `OKTA_DOMAIN`, `OKTA_CLIENT_ID`, or `OKTA_CLIENT_SECRET` env vars are not set, or the redirect URI in Okta/Google doesn't match `APP_BASE_URL`. Confirm the callback URI in your OAuth app settings exactly matches `{APP_BASE_URL}/auth/callback` (Okta) or `{APP_BASE_URL}/auth/google/callback` (Google).
+
+### "Invalid state parameter" error after login
+
+The login flow was interrupted (browser back button, expired cookie, etc.). Go back to `/login` and try again. If it happens consistently, make sure `APP_BASE_URL` is set to the actual hostname users access — mismatched URLs cause the OAuth state cookie to fail.
+
 ### A connector shows "Auth failed" after saving credentials
 
 The credentials are correct in format but rejected by the API. Common causes:
-- **Okta:** The API token needs Read Only Admin or Super Admin role; tokens expire after 30 days
+- **Okta connector:** The API token needs Read Only Admin or Super Admin role; tokens expire after 30 days
 - **GitHub:** Personal access tokens expire — check [github.com/settings/tokens](https://github.com/settings/tokens)
-- **AWS:** Verify the access key is active in the IAM console and has appropriate read permissions
+- **AWS:** Verify the access key is active in IAM and has appropriate read permissions
 
 ### Sync is showing 0 users
 
@@ -283,11 +373,11 @@ The connector authenticated but found no users — either the credentials don't 
 
 The Docker volume was removed. RETINA cannot decrypt saved credentials without the key. Options:
 1. Restore the key from your backup to `{RETINA_DATA_DIR}/encryption.key`
-2. If no backup exists, you'll need to delete the database and re-enter credentials: `docker volume rm retina-data && docker compose up -d`
+2. If no backup exists, delete the database and re-enter credentials: `docker volume rm retina-data && docker compose up -d`
 
 ### Cross-reference shows everyone as orphaned
 
-Okta isn't set as the baseline, or the Okta sync hasn't run yet. Go to **Cross-Reference**, confirm Okta is selected as the identity provider, and click **Sync Now** on the Okta connector first.
+The Okta connector hasn't synced yet. Click **Pull Access** on your Okta connector first, then run Cross-Reference again.
 
 ---
 
@@ -296,22 +386,50 @@ Okta isn't set as the baseline, or the Okta sync hasn't run yet. Go to **Cross-R
 ### Adding a new connector
 
 1. Create `connectors/my_system.py` extending `BaseConnector`
-2. Implement `get_users()` returning a list of standardized user objects
-3. Add the connector definition to `connectors/__init__.py`
-4. Add the credential schema to `database.py`
+2. Implement `fetch_users()` returning a list of standardized user dicts
+3. Register it in `connectors/__init__.py`
 
 ### Tech stack
 - **Python 3.9+** with FastAPI
 - **SQLAlchemy** ORM + SQLite
 - **Cryptography (Fernet)** for credential encryption
 - **APScheduler** for background sync jobs
-- **Jinja2** templates for the frontend
+- **Jinja2** templates + vanilla JS frontend
 
 ### Environment variables
 
 | Variable | Default | Description |
 |---|---|---|
-| `RETINA_DATA_DIR` | `.` (current directory) | Directory for database and encryption key |
+| `RETINA_DATA_DIR` | `.` | Directory for database, encryption key, and session key |
+| `APP_BASE_URL` | `http://localhost:8000` | Public base URL — must match OAuth redirect URIs |
+| `OKTA_DOMAIN` | — | Your Okta org domain, e.g. `yourorg.okta.com` |
+| `OKTA_CLIENT_ID` | — | Okta OAuth app client ID |
+| `OKTA_CLIENT_SECRET` | — | Okta OAuth app client secret |
+| `GOOGLE_CLIENT_ID` | — | Google OAuth app client ID |
+| `GOOGLE_CLIENT_SECRET` | — | Google OAuth app client secret |
+| `SESSION_SECRET` | auto-generated | HMAC key for signing session cookies; auto-saved to `session.key` if not set |
+
+### API endpoints
+
+All API endpoints require authentication. Endpoints that modify data (create/update/delete connectors, change schedules) require the **admin** role.
+
+**Auth**
+- `GET /auth/login` — redirect to Okta
+- `GET /auth/callback` — Okta OAuth callback
+- `GET /auth/google/login` — redirect to Google
+- `GET /auth/google/callback` — Google OAuth callback
+- `GET /auth/logout` — clear session
+- `GET /auth/me` — current user info
+
+**Access Review**
+- `GET /api/review/users` — all latest-snapshot users with review status
+- `POST /api/review/action` — flag, approve, or resolve a user
+- `GET /api/review/audit-log` — full audit log
+- `GET /api/review/export` — CSV export of all review decisions
+
+**RETINA Users (admin only)**
+- `GET /api/users` — list RETINA users
+- `PUT /api/users/{id}` — update role or active status
 
 ---
 

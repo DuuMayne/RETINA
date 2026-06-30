@@ -224,6 +224,30 @@ tr:last-child td { border-bottom: none; }
     color: #f59e0b;
 }
 
+/* Nav */
+.nav {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 1.5rem;
+    padding-bottom: 1rem;
+    border-bottom: 1px solid var(--border);
+}
+.nav-left { display: flex; align-items: center; gap: 1.5rem; }
+.nav-right { display: flex; align-items: center; gap: 1rem; }
+.nav-link {
+    color: var(--text-muted);
+    text-decoration: none;
+    font-size: 0.875rem;
+    padding: 0.35rem 0.75rem;
+    border-radius: 6px;
+    transition: all 0.15s;
+}
+.nav-link:hover { color: var(--text); background: var(--border); }
+.nav-link.active { color: var(--primary); background: rgba(108,124,255,0.12); }
+.user-badge { font-size: 0.8rem; color: var(--text-muted); }
+.user-badge strong { color: var(--text); }
+
 /* Connector picker */
 .picker-grid {
     max-height: 320px;
