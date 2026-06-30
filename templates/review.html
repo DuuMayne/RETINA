@@ -1,0 +1,353 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>RETINA — Access Review</title>
+    <link rel="stylesheet" href="/static/style.css">
+    <style>
+        .nav {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 1.5rem;
+            padding-bottom: 1rem;
+            border-bottom: 1px solid var(--border);
+        }
+        .nav-left { display: flex; align-items: center; gap: 1.5rem; }
+        .nav-left h1 { margin: 0; font-size: 1.25rem; }
+        .nav-link {
+            color: var(--text-muted);
+            text-decoration: none;
+            font-size: 0.875rem;
+            padding: 0.35rem 0.75rem;
+            border-radius: 6px;
+            transition: all 0.15s;
+        }
+        .nav-link:hover { color: var(--text); background: var(--border); }
+        .nav-link.active { color: var(--primary); background: rgba(108,124,255,0.12); }
+        .nav-right { display: flex; align-items: center; gap: 1rem; }
+        .user-badge { font-size: 0.8rem; color: var(--text-muted); }
+        .user-badge strong { color: var(--text); }
+
+        .tabs { display: flex; gap: 0.5rem; margin-bottom: 1.25rem; }
+        .tab {
+            padding: 0.45rem 1rem;
+            border-radius: 6px;
+            font-size: 0.875rem;
+            cursor: pointer;
+            border: 1px solid var(--border);
+            background: transparent;
+            color: var(--text-muted);
+        }
+        .tab.active { background: var(--primary); color: #fff; border-color: var(--primary); }
+
+        .filter-bar {
+            display: flex;
+            gap: 0.75rem;
+            margin-bottom: 1rem;
+            align-items: center;
+            flex-wrap: wrap;
+        }
+        .filter-bar input { flex: 1; min-width: 200px; }
+        .filter-bar select { width: auto; min-width: 160px; }
+
+        .review-status { display: inline-block; padding: 0.2rem 0.55rem; border-radius: 4px; font-size: 0.75rem; font-weight: 500; }
+        .review-status.pending  { background: rgba(139,143,163,0.15); color: var(--text-muted); }
+        .review-status.flagged  { background: rgba(255,77,106,0.15); color: var(--danger); }
+        .review-status.approved { background: rgba(52,211,153,0.15); color: var(--success); }
+        .review-status.resolved { background: rgba(108,124,255,0.12); color: var(--primary); }
+
+        .action-btns { display: flex; gap: 0.4rem; }
+        .action-btns button { padding: 0.3rem 0.65rem; font-size: 0.75rem; }
+
+        .notes-cell { max-width: 180px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 0.8rem; color: var(--text-muted); }
+
+        /* Flag modal */
+        .modal-overlay { display: none; position: fixed; inset: 0; background: rgba(0,0,0,0.6); z-index: 100; justify-content: center; align-items: center; }
+        .modal-overlay.active { display: flex; }
+        .modal { background: var(--surface); border: 1px solid var(--border); border-radius: 12px; padding: 1.5rem; width: 440px; max-width: 90vw; }
+        .modal h3 { margin-bottom: 0.25rem; }
+        .modal .sub { font-size: 0.8rem; color: var(--text-muted); margin-bottom: 1rem; }
+        .modal label { display: block; font-size: 0.75rem; color: var(--text-muted); margin-bottom: 0.25rem; margin-top: 0.75rem; }
+        .modal textarea { width: 100%; min-height: 80px; resize: vertical; }
+        .modal .actions { display: flex; justify-content: flex-end; gap: 0.5rem; margin-top: 1.25rem; }
+
+        .audit-action { display: inline-block; padding: 0.15rem 0.5rem; border-radius: 4px; font-size: 0.75rem; font-weight: 500; text-transform: uppercase; }
+        .audit-action.flag    { background: rgba(255,77,106,0.15); color: var(--danger); }
+        .audit-action.approve { background: rgba(52,211,153,0.15); color: var(--success); }
+        .audit-action.resolve { background: rgba(108,124,255,0.12); color: var(--primary); }
+        .audit-action.login   { background: rgba(139,143,163,0.12); color: var(--text-muted); }
+    </style>
+</head>
+<body>
+<div class="container">
+    <nav class="nav">
+        <div class="nav-left">
+            <h1>RETINA</h1>
+            <a href="/" class="nav-link">Dashboard</a>
+            <a href="/review" class="nav-link active">Access Review</a>
+        </div>
+        <div class="nav-right">
+            <span class="user-badge"><strong>{{ user.name }}</strong> &middot; {{ user.role }}</span>
+            <a href="/auth/logout" class="nav-link">Logout</a>
+        </div>
+    </nav>
+
+    <div class="tabs">
+        <button class="tab active" onclick="switchTab('review', this)">Review Users</button>
+        <button class="tab" onclick="switchTab('audit', this)">Audit Log</button>
+    </div>
+
+    <!-- Review tab -->
+    <div id="tab-review">
+        <div class="filter-bar">
+            <input type="text" id="search" placeholder="Search by email or name..." oninput="applyFilters()">
+            <select id="filter-app" onchange="applyFilters()">
+                <option value="">All Applications</option>
+            </select>
+            <select id="filter-status" onchange="applyFilters()">
+                <option value="">All Statuses</option>
+                <option value="pending">Pending</option>
+                <option value="flagged">Flagged</option>
+                <option value="approved">Approved</option>
+                <option value="resolved">Resolved</option>
+            </select>
+            <button class="secondary" onclick="exportCSV()">Export CSV</button>
+            <button onclick="loadReviewUsers()">Refresh</button>
+        </div>
+        <div id="review-table-wrap"><div class="empty"><span class="spinner"></span> Loading...</div></div>
+        <div id="review-count" style="margin-top:0.75rem;font-size:0.8rem;color:var(--text-muted)"></div>
+    </div>
+
+    <!-- Audit log tab -->
+    <div id="tab-audit" style="display:none">
+        <div id="audit-table-wrap"><div class="empty"><span class="spinner"></span> Loading...</div></div>
+    </div>
+</div>
+
+<!-- Flag / note modal -->
+<div id="action-modal" class="modal-overlay" onclick="if(event.target===this)closeModal()">
+    <div class="modal">
+        <h3 id="modal-title">Flag for Removal</h3>
+        <p class="sub" id="modal-sub"></p>
+        <label>Notes (optional)</label>
+        <textarea id="modal-notes" placeholder="Reason for this decision..."></textarea>
+        <div class="actions">
+            <button class="secondary" onclick="closeModal()">Cancel</button>
+            <button id="modal-confirm" onclick="submitAction()">Confirm</button>
+        </div>
+    </div>
+</div>
+
+<script>
+let allUsers = [];
+let pendingAction = null;
+
+// ── Init ──
+document.addEventListener('DOMContentLoaded', () => {
+    loadReviewUsers();
+});
+
+function switchTab(name, btn) {
+    document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
+    btn.classList.add('active');
+    document.getElementById('tab-review').style.display = name === 'review' ? '' : 'none';
+    document.getElementById('tab-audit').style.display  = name === 'audit'  ? '' : 'none';
+    if (name === 'audit') loadAuditLog();
+}
+
+// ── API helper ──
+async function api(method, url, body) {
+    const opts = { method, headers: { 'Content-Type': 'application/json' } };
+    if (body) opts.body = JSON.stringify(body);
+    const res = await fetch(url, opts);
+    if (res.status === 401) { location.href = '/login'; return; }
+    if (!res.ok) {
+        const err = await res.json().catch(() => ({ detail: res.statusText }));
+        throw new Error(err.detail || 'Request failed');
+    }
+    return res.json();
+}
+
+// ── Review users ──
+async function loadReviewUsers() {
+    document.getElementById('review-table-wrap').innerHTML = '<div class="empty"><span class="spinner"></span> Loading...</div>';
+    try {
+        allUsers = await api('GET', '/api/review/users');
+        populateAppFilter();
+        applyFilters();
+    } catch (e) {
+        document.getElementById('review-table-wrap').innerHTML = `<div class="empty" style="color:var(--danger)">${esc(e.message)}</div>`;
+    }
+}
+
+function populateAppFilter() {
+    const apps = [...new Set(allUsers.map(u => u.application_name))].sort();
+    const sel = document.getElementById('filter-app');
+    sel.innerHTML = '<option value="">All Applications</option>' +
+        apps.map(a => `<option value="${esc(a)}">${esc(a)}</option>`).join('');
+}
+
+function applyFilters() {
+    const q      = document.getElementById('search').value.toLowerCase();
+    const appF   = document.getElementById('filter-app').value;
+    const statF  = document.getElementById('filter-status').value;
+
+    const filtered = allUsers.filter(u =>
+        (!q      || u.email.includes(q) || u.name.toLowerCase().includes(q)) &&
+        (!appF   || u.application_name === appF) &&
+        (!statF  || u.review_status === statF)
+    );
+    renderReviewTable(filtered);
+}
+
+function renderReviewTable(users) {
+    const wrap = document.getElementById('review-table-wrap');
+    document.getElementById('review-count').textContent = `${users.length} user${users.length !== 1 ? 's' : ''}`;
+
+    if (!users.length) {
+        wrap.innerHTML = '<div class="empty">No users match your filters.</div>';
+        return;
+    }
+
+    wrap.innerHTML = `
+        <table>
+            <thead>
+                <tr>
+                    <th>Application</th>
+                    <th>Email</th>
+                    <th>Name</th>
+                    <th>Status</th>
+                    <th>Last Login</th>
+                    <th>Review</th>
+                    <th>Notes</th>
+                    <th>Actions</th>
+                </tr>
+            </thead>
+            <tbody>
+                ${users.map((u, i) => `
+                    <tr>
+                        <td><span class="tag">${esc(u.application_name)}</span></td>
+                        <td>${esc(u.email)}</td>
+                        <td>${esc(u.name)}</td>
+                        <td><span class="status-${u.app_status === 'active' ? 'active' : 'inactive'}">${esc(u.app_status || '—')}</span></td>
+                        <td>${u.last_login ? new Date(u.last_login).toLocaleDateString() : '—'}</td>
+                        <td><span class="review-status ${u.review_status}">${esc(u.review_status)}</span></td>
+                        <td class="notes-cell" title="${esc(u.review_notes)}">${esc(u.review_notes) || '—'}</td>
+                        <td>
+                            <div class="action-btns">
+                                <button class="danger" onclick='openModal("flag", ${JSON.stringify(u)})'>Flag</button>
+                                <button onclick='openModal("approve", ${JSON.stringify(u)})'>Approve</button>
+                                ${u.review_status === 'flagged' ? `<button class="secondary" onclick='openModal("resolve", ${JSON.stringify(u)})'>Resolve</button>` : ''}
+                            </div>
+                        </td>
+                    </tr>
+                `).join('')}
+            </tbody>
+        </table>
+    `;
+}
+
+// ── Action modal ──
+function openModal(action, user) {
+    pendingAction = { action, user };
+    const titles = { flag: 'Flag for Removal', approve: 'Approve Access', resolve: 'Mark as Resolved' };
+    const confirms = { flag: 'Flag', approve: 'Approve', resolve: 'Resolve' };
+    const btnColors = { flag: 'danger', approve: '', resolve: 'secondary' };
+
+    document.getElementById('modal-title').textContent = titles[action];
+    document.getElementById('modal-sub').textContent = `${user.email} · ${user.application_name}`;
+    document.getElementById('modal-notes').value = user.review_notes || '';
+    const btn = document.getElementById('modal-confirm');
+    btn.textContent = confirms[action];
+    btn.className = btnColors[action] || '';
+    document.getElementById('action-modal').classList.add('active');
+    setTimeout(() => document.getElementById('modal-notes').focus(), 100);
+}
+
+function closeModal() {
+    document.getElementById('action-modal').classList.remove('active');
+    pendingAction = null;
+}
+
+async function submitAction() {
+    if (!pendingAction) return;
+    const { action, user } = pendingAction;
+    const notes = document.getElementById('modal-notes').value.trim();
+    try {
+        await api('POST', '/api/review/action', {
+            action,
+            application_id: user.application_id,
+            application_name: user.application_name,
+            snapshot_id: user.snapshot_id,
+            user_email: user.email,
+            user_name: user.name,
+            notes,
+        });
+        closeModal();
+        await loadReviewUsers();
+    } catch (e) {
+        alert('Error: ' + e.message);
+    }
+}
+
+// ── Audit log ──
+async function loadAuditLog() {
+    document.getElementById('audit-table-wrap').innerHTML = '<div class="empty"><span class="spinner"></span> Loading...</div>';
+    try {
+        const logs = await api('GET', '/api/review/audit-log');
+        renderAuditLog(logs);
+    } catch (e) {
+        document.getElementById('audit-table-wrap').innerHTML = `<div class="empty" style="color:var(--danger)">${esc(e.message)}</div>`;
+    }
+}
+
+function renderAuditLog(logs) {
+    const wrap = document.getElementById('audit-table-wrap');
+    if (!logs.length) {
+        wrap.innerHTML = '<div class="empty">No audit entries yet.</div>';
+        return;
+    }
+    wrap.innerHTML = `
+        <table>
+            <thead>
+                <tr>
+                    <th>When</th>
+                    <th>Action</th>
+                    <th>By</th>
+                    <th>User</th>
+                    <th>Application</th>
+                    <th>Notes</th>
+                </tr>
+            </thead>
+            <tbody>
+                ${logs.map(l => `
+                    <tr>
+                        <td style="font-size:0.8rem;color:var(--text-muted)">${new Date(l.created_at).toLocaleString()}</td>
+                        <td><span class="audit-action ${l.action}">${esc(l.action)}</span></td>
+                        <td>${esc(l.actor_email)}</td>
+                        <td>${esc(l.target_email || '—')}</td>
+                        <td>${esc(l.application_name || '—')}</td>
+                        <td style="font-size:0.8rem;color:var(--text-muted)">${esc(l.details || '—')}</td>
+                    </tr>
+                `).join('')}
+            </tbody>
+        </table>
+        <div style="margin-top:0.75rem;font-size:0.8rem;color:var(--text-muted)">${logs.length} entries</div>
+    `;
+}
+
+// ── CSV export ──
+function exportCSV() {
+    window.location.href = '/api/review/export';
+}
+
+function esc(s) {
+    const d = document.createElement('div');
+    d.textContent = s || '';
+    return d.innerHTML;
+}
+</script>
+</body>
+</html>

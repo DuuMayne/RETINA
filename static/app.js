@@ -17,6 +17,7 @@ async function api(method, url, body) {
     const opts = { method, headers: { 'Content-Type': 'application/json' } };
     if (body) opts.body = JSON.stringify(body);
     const res = await fetch(API + url, opts);
+    if (res.status === 401) { location.href = '/login'; return; }
     if (!res.ok) {
         const err = await res.json().catch(() => ({ detail: res.statusText }));
         throw new Error(err.detail || 'Request failed');
