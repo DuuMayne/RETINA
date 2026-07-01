@@ -22,6 +22,9 @@ from scheduler import (
     get_scheduled_jobs, SCHEDULE_PRESETS, sync_application_task,
 )
 from auth import require_auth, require_admin
+from review_common import apply_review_decision
+import products
+import cycles
 
 
 @asynccontextmanager
@@ -35,6 +38,8 @@ async def lifespan(app: FastAPI):
 app = FastAPI(title="RETINA", lifespan=lifespan)
 app.mount("/static", StaticFiles(directory="static"), name="static")
 templates = Jinja2Templates(directory="templates")
+app.include_router(products.router)
+app.include_router(cycles.router)
 
 
 @app.get("/auth/me")
@@ -52,6 +57,16 @@ async def index(request: Request, user: dict = Depends(require_auth)):
 @app.get("/review", response_class=HTMLResponse)
 async def review_page(request: Request, user: dict = Depends(require_auth)):
     return templates.TemplateResponse("review.html", {"request": request, "user": user})
+
+
+@app.get("/products", response_class=HTMLResponse)
+async def products_page(request: Request, user: dict = Depends(require_admin)):
+    return templates.TemplateResponse("products.html", {"request": request, "user": user})
+
+
+@app.get("/cycles", response_class=HTMLResponse)
+async def cycles_page(request: Request, user: dict = Depends(require_auth)):
+    return templates.TemplateResponse("cycles.html", {"request": request, "user": user})
 
 
 # ── API: Connector metadata ──
@@ -436,6 +451,7 @@ async def review_users(db: Session = Depends(get_db), session: dict = Depends(re
                 .filter(
                     ReviewItem.application_id == app_record.id,
                     ReviewItem.user_email == email,
+                    ReviewItem.cycle_id.is_(None),
                 )
                 .order_by(ReviewItem.created_at.desc())
                 .first()
@@ -462,7 +478,7 @@ async def review_users(db: Session = Depends(get_db), session: dict = Depends(re
 
 @app.post("/api/review/action")
 async def review_action(body: dict, db: Session = Depends(get_db), session: dict = Depends(require_auth)):
-    """Flag or approve a user entry."""
+    """Flag or approve a user entry (ad-hoc review, no cycle)."""
     action = body.get("action")
     if action not in ("flag", "approve", "resolve"):
         raise HTTPException(400, "action must be: flag, approve, or resolve")
@@ -475,49 +491,43 @@ async def review_action(body: dict, db: Session = Depends(get_db), session: dict
     notes = body.get("notes", "")
     actor_email = session["email"]
 
-    status_map = {"flag": "flagged", "approve": "approved", "resolve": "resolved"}
-    now = datetime.now(timezone.utc)
-
     existing = (
         db.query(ReviewItem)
-        .filter(ReviewItem.application_id == application_id, ReviewItem.user_email == user_email)
+        .filter(
+            ReviewItem.application_id == application_id,
+            ReviewItem.user_email == user_email,
+            ReviewItem.cycle_id.is_(None),
+        )
         .first()
     )
-    if existing:
-        existing.status = status_map[action]
-        existing.notes = notes
-        existing.reviewed_by = actor_email
-        existing.reviewed_at = now
-        existing.snapshot_id = snapshot_id
-    else:
-        db.add(ReviewItem(
+    if not existing:
+        existing = ReviewItem(
             id=str(uuid.uuid4()),
             application_id=application_id,
             application_name=application_name,
             snapshot_id=snapshot_id,
             user_email=user_email,
             user_name=user_name,
-            status=status_map[action],
-            notes=notes,
-            reviewed_by=actor_email,
-            reviewed_at=now,
-        ))
+            status="pending",
+        )
+        db.add(existing)
+    else:
+        existing.snapshot_id = snapshot_id
 
-    db.add(AuditLog(
-        id=str(uuid.uuid4()),
-        action=action,
-        actor_email=actor_email,
-        target_email=user_email,
-        application_name=application_name,
-        details=notes,
-    ))
-    db.commit()
+    apply_review_decision(db, existing, action, notes, actor_email)
     return {"ok": True}
 
 
 @app.get("/api/review/audit-log")
 async def review_audit_log(db: Session = Depends(get_db), session: dict = Depends(require_auth)):
-    logs = db.query(AuditLog).order_by(AuditLog.created_at.desc()).limit(500).all()
+    """Audit trail for ad-hoc review decisions. Cycle audit trails live under /api/cycles/{id}."""
+    logs = (
+        db.query(AuditLog)
+        .filter(AuditLog.cycle_id.is_(None))
+        .order_by(AuditLog.created_at.desc())
+        .limit(500)
+        .all()
+    )
     return [
         {
             "action": l.action,
@@ -533,8 +543,13 @@ async def review_audit_log(db: Session = Depends(get_db), session: dict = Depend
 
 @app.get("/api/review/export")
 async def review_export(db: Session = Depends(get_db), session: dict = Depends(require_auth)):
-    """Export all review decisions as CSV for compliance evidence."""
-    items = db.query(ReviewItem).order_by(ReviewItem.reviewed_at.desc()).all()
+    """Export ad-hoc review decisions as CSV. Cycle exports are at /api/cycles/{id}/export."""
+    items = (
+        db.query(ReviewItem)
+        .filter(ReviewItem.cycle_id.is_(None))
+        .order_by(ReviewItem.reviewed_at.desc())
+        .all()
+    )
 
     output = io.StringIO()
     writer = csv.writer(output)
