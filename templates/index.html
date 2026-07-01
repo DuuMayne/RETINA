@@ -16,7 +16,6 @@
             </div>
             <div class="nav-right">
                 <span class="user-badge"><strong>{{ user.name }}</strong> &middot; {{ user.role }}</span>
-                <a href="/auth/logout" class="nav-link">Logout</a>
             </div>
         </nav>
         <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:0.25rem">
@@ -61,6 +60,33 @@
                     <button class="secondary" onclick="closeAddModal()">Cancel</button>
                     <button onclick="submitAddApp()">Save</button>
                 </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Schedule Modal -->
+    <div id="schedule-modal" class="modal-overlay" onclick="if(event.target===this)closeScheduleModal()">
+        <div class="modal">
+            <h2>Sync Schedule</h2>
+            <input type="hidden" id="schedule-app-id">
+            <p style="font-size:0.85rem;color:var(--text-muted);margin-bottom:1rem" id="schedule-app-name"></p>
+            <div class="form-row">
+                <div>
+                    <label>Frequency</label>
+                    <select id="schedule-preset">
+                        <option value="">Off (manual sync only)</option>
+                        <option value="hourly">Hourly</option>
+                        <option value="every_6_hours">Every 6 hours</option>
+                        <option value="daily">Daily (2 AM)</option>
+                        <option value="weekly">Weekly (Monday 2 AM)</option>
+                        <option value="monthly">Monthly (1st, 2 AM)</option>
+                    </select>
+                </div>
+            </div>
+            <div style="font-size:0.75rem;color:var(--text-muted)">Each scheduled run creates a new snapshot, so History keeps a record of access over time.</div>
+            <div class="actions">
+                <button class="secondary" onclick="closeScheduleModal()">Cancel</button>
+                <button onclick="submitSchedule()">Save</button>
             </div>
         </div>
     </div>

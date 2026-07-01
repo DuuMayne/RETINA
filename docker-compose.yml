@@ -7,13 +7,16 @@ services:
       - retina-data:/app/data
     environment:
       - RETINA_DATA_DIR=/app/data
-      - OKTA_DOMAIN=             # e.g. yourorg.okta.com
-      - OKTA_CLIENT_ID=
-      - OKTA_CLIENT_SECRET=
-      - APP_BASE_URL=http://localhost:8000
-      - GOOGLE_CLIENT_ID=
-      - GOOGLE_CLIENT_SECRET=
-      # SESSION_SECRET is auto-generated and saved to /app/data/session.key if not set
+      # RETINA does not handle login itself — deploy it behind an
+      # authenticating reverse proxy (Cloudflare Access, oauth2-proxy,
+      # nginx + auth_request, etc.) that has already verified the user
+      # against your IdP and forwards their email in a header.
+      - AUTH_EMAIL_HEADER=Cf-Access-Authenticated-User-Email
+      # Optional: header carrying the user's display name, if your proxy sends one
+      - AUTH_NAME_HEADER=
+      # Optional: comma-separated emails that get the admin role.
+      # If left blank, the first person to access RETINA becomes admin.
+      - RETINA_ADMIN_EMAILS=
     restart: unless-stopped
 
 volumes:
