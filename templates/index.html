@@ -13,6 +13,8 @@
                 <h1 style="margin:0;font-size:1.25rem">RETINA</h1>
                 <a href="/" class="nav-link active">Dashboard</a>
                 <a href="/review" class="nav-link">Access Review</a>
+                <a href="/cycles" class="nav-link">Review Cycles</a>
+                {% if user.role == 'admin' %}<a href="/products" class="nav-link">Products</a>{% endif %}
             </div>
             <div class="nav-right">
                 <span class="user-badge"><strong>{{ user.name }}</strong> &middot; {{ user.role }}</span>

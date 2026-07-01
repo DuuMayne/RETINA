@@ -1,0 +1,185 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>RETINA — Review Cycles</title>
+    <link rel="stylesheet" href="/static/style.css">
+    <style>
+        .nav {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 1.5rem;
+            padding-bottom: 1rem;
+            border-bottom: 1px solid var(--border);
+        }
+        .nav-left { display: flex; align-items: center; gap: 1.5rem; }
+        .nav-left h1 { margin: 0; font-size: 1.25rem; }
+        .nav-link {
+            color: var(--text-muted);
+            text-decoration: none;
+            font-size: 0.875rem;
+            padding: 0.35rem 0.75rem;
+            border-radius: 6px;
+            transition: all 0.15s;
+        }
+        .nav-link:hover { color: var(--text); background: var(--border); }
+        .nav-link.active { color: var(--primary); background: rgba(108,124,255,0.12); }
+        .nav-right { display: flex; align-items: center; gap: 1rem; }
+        .user-badge { font-size: 0.8rem; color: var(--text-muted); }
+        .user-badge strong { color: var(--text); }
+
+        .cycle-card { cursor: pointer; }
+        .cycle-card:hover { border-color: var(--primary); }
+        .cycle-header { display: flex; justify-content: space-between; align-items: center; }
+        .cycle-status { display: inline-block; padding: 0.15rem 0.55rem; border-radius: 4px; font-size: 0.7rem; font-weight: 600; text-transform: uppercase; margin-left: 0.5rem; }
+        .cycle-status.active { background: rgba(52,211,153,0.15); color: var(--success); }
+        .cycle-status.closed { background: rgba(139,143,163,0.15); color: var(--text-muted); }
+        .cycle-status.overdue { background: rgba(255,77,106,0.15); color: var(--danger); }
+
+        .progress-bar { height: 6px; border-radius: 3px; background: var(--border); overflow: hidden; margin-top: 0.5rem; }
+        .progress-fill { height: 100%; background: var(--success); }
+
+        .tabs { display: flex; gap: 0.5rem; margin: 1rem 0 1.25rem 0; }
+        .tab { padding: 0.45rem 1rem; border-radius: 6px; font-size: 0.875rem; cursor: pointer; border: 1px solid var(--border); background: transparent; color: var(--text-muted); }
+        .tab.active { background: var(--primary); color: #fff; border-color: var(--primary); }
+
+        .filter-bar { display: flex; gap: 0.75rem; margin-bottom: 1rem; align-items: center; flex-wrap: wrap; }
+        .filter-bar input { flex: 1; min-width: 200px; }
+        .filter-bar select { width: auto; min-width: 160px; }
+
+        .review-status { display: inline-block; padding: 0.2rem 0.55rem; border-radius: 4px; font-size: 0.75rem; font-weight: 500; }
+        .review-status.pending  { background: rgba(139,143,163,0.15); color: var(--text-muted); }
+        .review-status.flagged  { background: rgba(255,77,106,0.15); color: var(--danger); }
+        .review-status.approved { background: rgba(52,211,153,0.15); color: var(--success); }
+        .review-status.resolved { background: rgba(108,124,255,0.12); color: var(--primary); }
+
+        .action-btns { display: flex; gap: 0.4rem; }
+        .action-btns button { padding: 0.3rem 0.65rem; font-size: 0.75rem; }
+        .notes-cell { max-width: 180px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 0.8rem; color: var(--text-muted); }
+
+        .modal-overlay { display: none; position: fixed; inset: 0; background: rgba(0,0,0,0.6); z-index: 100; justify-content: center; align-items: center; }
+        .modal-overlay.active { display: flex; }
+        .modal { background: var(--surface); border: 1px solid var(--border); border-radius: 12px; padding: 1.5rem; width: 480px; max-width: 90vw; max-height: 85vh; overflow-y: auto; }
+        .modal h2, .modal h3 { margin-bottom: 0.5rem; }
+        .modal .sub { font-size: 0.8rem; color: var(--text-muted); margin-bottom: 1rem; }
+        .modal label { display: block; font-size: 0.75rem; color: var(--text-muted); margin-bottom: 0.25rem; margin-top: 0.75rem; }
+        .modal textarea { width: 100%; min-height: 80px; resize: vertical; }
+        .modal .actions { display: flex; justify-content: flex-end; gap: 0.5rem; margin-top: 1.25rem; }
+
+        .product-checklist { border: 1px solid var(--border); border-radius: 8px; padding: 0.5rem 0.75rem; max-height: 180px; overflow-y: auto; }
+        .product-checklist label { display: flex; align-items: center; gap: 0.5rem; font-size: 0.85rem; color: var(--text); margin: 0.35rem 0; }
+        .modal input[type="radio"], .modal input[type="checkbox"] { width: auto; flex: none; }
+
+        .audit-action { display: inline-block; padding: 0.15rem 0.5rem; border-radius: 4px; font-size: 0.75rem; font-weight: 500; text-transform: uppercase; }
+        .audit-action.flag { background: rgba(255,77,106,0.15); color: var(--danger); }
+        .audit-action.approve { background: rgba(52,211,153,0.15); color: var(--success); }
+        .audit-action.resolve { background: rgba(108,124,255,0.12); color: var(--primary); }
+        .audit-action.cycle_generated, .audit-action.reminder_sent { background: rgba(139,143,163,0.12); color: var(--text-muted); }
+        .audit-action.escalation_sent { background: rgba(245,158,11,0.15); color: #f59e0b; }
+
+        .warning-box { font-size: 0.8rem; padding: 0.6rem 0.85rem; border-radius: 8px; background: rgba(245,158,11,0.1); border: 1px solid rgba(245,158,11,0.3); color: #f59e0b; margin-bottom: 1rem; }
+    </style>
+</head>
+<body>
+<div class="container">
+    <nav class="nav">
+        <div class="nav-left">
+            <h1>RETINA</h1>
+            <a href="/" class="nav-link">Dashboard</a>
+            <a href="/review" class="nav-link">Access Review</a>
+            <a href="/cycles" class="nav-link active">Review Cycles</a>
+            {% if user.role == 'admin' %}<a href="/products" class="nav-link">Products</a>{% endif %}
+        </div>
+        <div class="nav-right">
+            <span class="user-badge"><strong>{{ user.name }}</strong> &middot; {{ user.role }}</span>
+        </div>
+    </nav>
+
+    <!-- List view -->
+    <div id="cycle-list-view">
+        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:1rem">
+            <p style="margin:0;font-size:0.85rem;color:var(--text-muted)">Time-boxed review campaigns — each generates its own scoped set of review items and tracks progress against a due date.</p>
+            {% if user.role == 'admin' %}<button onclick="openNewCycleModal()">+ New Cycle</button>{% endif %}
+        </div>
+        <div id="cycle-list"></div>
+    </div>
+
+    <!-- Detail view -->
+    <div id="cycle-detail-view" style="display:none">
+        <button class="secondary" onclick="showListView()" style="margin-bottom:1rem">&larr; Back to Cycles</button>
+        <div id="cycle-detail-header"></div>
+
+        <div class="tabs">
+            <button class="tab active" onclick="switchDetailTab('items', this)">Items</button>
+            <button class="tab" onclick="switchDetailTab('audit', this)">Audit Log</button>
+        </div>
+
+        <div id="detail-tab-items">
+            <div class="filter-bar">
+                <input type="text" id="item-search" placeholder="Search by email or name..." oninput="applyItemFilters()">
+                <select id="item-scope-toggle" onchange="reloadCycleItems()">
+                    <option value="mine">My Assignments</option>
+                    <option value="all">All Items</option>
+                </select>
+                <select id="item-status-filter" onchange="applyItemFilters()">
+                    <option value="">All Statuses</option>
+                    <option value="pending">Pending</option>
+                    <option value="flagged">Flagged</option>
+                    <option value="approved">Approved</option>
+                    <option value="resolved">Resolved</option>
+                </select>
+                <button class="secondary" onclick="exportCycleCSV()">Export CSV</button>
+            </div>
+            <div id="item-table-wrap"></div>
+        </div>
+
+        <div id="detail-tab-audit" style="display:none">
+            <div id="audit-table-wrap"></div>
+        </div>
+    </div>
+</div>
+
+<!-- New Cycle Modal -->
+<div id="new-cycle-modal" class="modal-overlay" onclick="if(event.target===this)closeNewCycleModal()">
+    <div class="modal">
+        <h2>New Review Cycle</h2>
+        <label>Name</label>
+        <input type="text" id="cycle-name" placeholder="e.g. Q3 2026 SOC 2 Review">
+        <label>Due Date</label>
+        <input type="date" id="cycle-due-date">
+        <label>Scope</label>
+        <div style="margin-top:0.25rem">
+            <label style="display:flex;align-items:center;gap:0.5rem;font-weight:400">
+                <input type="radio" name="cycle-scope-type" value="all" checked onchange="toggleCycleScopeType()"> All applications
+            </label>
+            <label style="display:flex;align-items:center;gap:0.5rem;font-weight:400">
+                <input type="radio" name="cycle-scope-type" value="products" onchange="toggleCycleScopeType()"> Selected products
+            </label>
+        </div>
+        <div id="cycle-product-checklist" class="product-checklist" style="display:none;margin-top:0.5rem"></div>
+        <div class="actions">
+            <button class="secondary" onclick="closeNewCycleModal()">Cancel</button>
+            <button onclick="submitNewCycle()">Create &amp; Generate</button>
+        </div>
+    </div>
+</div>
+
+<!-- Item Action Modal -->
+<div id="item-action-modal" class="modal-overlay" onclick="if(event.target===this)closeItemActionModal()">
+    <div class="modal">
+        <h3 id="item-modal-title">Flag for Removal</h3>
+        <p class="sub" id="item-modal-sub"></p>
+        <label>Notes (optional)</label>
+        <textarea id="item-modal-notes" placeholder="Reason for this decision..."></textarea>
+        <div class="actions">
+            <button class="secondary" onclick="closeItemActionModal()">Cancel</button>
+            <button id="item-modal-confirm" onclick="submitItemAction()">Confirm</button>
+        </div>
+    </div>
+</div>
+
+<script src="/static/cycles.js"></script>
+</body>
+</html>

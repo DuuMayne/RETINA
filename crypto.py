@@ -25,3 +25,13 @@ def encrypt_credentials(credentials: dict) -> str:
 def decrypt_credentials(encrypted: str) -> dict:
     f = Fernet(_get_key())
     return json.loads(f.decrypt(encrypted.encode()).decode())
+
+
+def encrypt_secret(value: str) -> str:
+    f = Fernet(_get_key())
+    return f.encrypt(value.encode()).decode()
+
+
+def decrypt_secret(encrypted: str) -> str:
+    f = Fernet(_get_key())
+    return f.decrypt(encrypted.encode()).decode()

@@ -3,21 +3,30 @@ from __future__ import annotations
 
 import asyncio
 import logging
+import os
 import uuid
 from datetime import datetime, timezone
 from typing import Optional
 
+import httpx
 from apscheduler.schedulers.asyncio import AsyncIOScheduler
 from apscheduler.triggers.cron import CronTrigger
 from apscheduler.triggers.interval import IntervalTrigger
 from sqlalchemy.orm import Session
 
-from database import SessionLocal, Application, AccessSnapshot
-from crypto import decrypt_credentials
+from database import (
+    SessionLocal, Application, AccessSnapshot,
+    Product, ProductReviewer, ReviewCycle, ReviewItem, SentReminder, AuditLog,
+)
+from crypto import decrypt_credentials, decrypt_secret
 from connectors import get_connector
 
 logger = logging.getLogger("scheduler")
 logger.setLevel(logging.INFO)
+
+REMINDER_THRESHOLDS_DAYS = (7, 3, 1)
+GLOBAL_SLACK_WEBHOOK_URL = os.environ.get("RETINA_SLACK_WEBHOOK_URL", "")
+REMINDER_INTERVAL_HOURS = int(os.environ.get("RETINA_REMINDER_INTERVAL_HOURS", "6"))
 
 # Schedule presets mapped to cron expressions
 SCHEDULE_PRESETS = {
@@ -102,6 +111,117 @@ async def sync_application_task(app_id: str):
         db.close()
 
 
+async def _post_to_slack(webhook_url: str, text: str):
+    try:
+        async with httpx.AsyncClient(timeout=10) as client:
+            resp = await client.post(webhook_url, json={"text": text})
+            resp.raise_for_status()
+        return True
+    except Exception as e:
+        logger.error(f"Slack notification failed: {e}")
+        return False
+
+
+async def check_cycle_reminders_task():
+    """Runs periodically. For each active review cycle, sends a Slack reminder
+    to a product's reviewers at 7/3/1 days before the due date (once each,
+    deduped via SentReminder), and a repeating overdue escalation (at most
+    once per product per day) once the due date has passed."""
+    db: Session = SessionLocal()
+    try:
+        now = datetime.now(timezone.utc)
+        today_str = now.date().isoformat()
+
+        cycles = db.query(ReviewCycle).filter(ReviewCycle.status == "active").all()
+        for cycle in cycles:
+            due_date = cycle.due_date
+            if due_date.tzinfo is None:
+                due_date = due_date.replace(tzinfo=timezone.utc)
+            days_until_due = (due_date.date() - now.date()).days
+
+            pending_by_product: dict[Optional[str], int] = {}
+            pending_items = (
+                db.query(ReviewItem)
+                .filter(ReviewItem.cycle_id == cycle.id, ReviewItem.status == "pending")
+                .all()
+            )
+            for item in pending_items:
+                pending_by_product[item.product_id] = pending_by_product.get(item.product_id, 0) + 1
+
+            if not pending_by_product:
+                continue
+
+            if days_until_due < 0:
+                threshold = f"overdue_{today_str}"
+                is_escalation = True
+            elif days_until_due in REMINDER_THRESHOLDS_DAYS:
+                threshold = f"{days_until_due}d"
+                is_escalation = False
+            else:
+                continue
+
+            for product_id, pending_count in pending_by_product.items():
+                pid_key = product_id or ""
+                already_sent = (
+                    db.query(SentReminder)
+                    .filter(
+                        SentReminder.cycle_id == cycle.id,
+                        SentReminder.product_id == pid_key,
+                        SentReminder.threshold == threshold,
+                    )
+                    .first()
+                )
+                if already_sent:
+                    continue
+
+                product_name = "Ungrouped applications"
+                webhook_url = GLOBAL_SLACK_WEBHOOK_URL
+                if product_id:
+                    product = db.query(Product).filter(Product.id == product_id).first()
+                    if product:
+                        product_name = product.name
+                        if product.slack_webhook_url_encrypted:
+                            webhook_url = decrypt_secret(product.slack_webhook_url_encrypted)
+
+                if not webhook_url:
+                    logger.warning(f"No Slack webhook configured for product '{product_name}' — skipping reminder")
+                    continue
+
+                if is_escalation:
+                    message = (
+                        f":rotating_light: *OVERDUE* — @here Review cycle *{cycle.name}* is past its due date "
+                        f"({due_date.date().isoformat()}) with *{pending_count}* pending item(s) in *{product_name}*."
+                    )
+                    action = "escalation_sent"
+                else:
+                    message = (
+                        f":bell: Reminder — Review cycle *{cycle.name}* is due in *{days_until_due} day(s)* "
+                        f"with *{pending_count}* pending item(s) in *{product_name}*."
+                    )
+                    action = "reminder_sent"
+
+                sent = await _post_to_slack(webhook_url, message)
+                if sent:
+                    db.add(SentReminder(
+                        id=str(uuid.uuid4()),
+                        cycle_id=cycle.id,
+                        product_id=pid_key,
+                        threshold=threshold,
+                    ))
+                    db.add(AuditLog(
+                        id=str(uuid.uuid4()),
+                        action=action,
+                        actor_email="system",
+                        application_name=product_name,
+                        details=f"{pending_count} pending item(s), due {due_date.date().isoformat()}",
+                        cycle_id=cycle.id,
+                    ))
+                    db.commit()
+
+    finally:
+        db.close()
+
+
 def schedule_app(app_id: str, schedule_str: str):
     """Add or update a scheduled sync job for an application."""
     sched = get_scheduler()
@@ -160,6 +280,13 @@ def start_scheduler():
     sched = get_scheduler()
     if not sched.running:
         load_all_schedules()
+        sched.add_job(
+            check_cycle_reminders_task,
+            trigger=IntervalTrigger(hours=REMINDER_INTERVAL_HOURS),
+            id="cycle_reminders",
+            name="Review cycle reminder/escalation check",
+            replace_existing=True,
+        )
         sched.start()
         logger.info("Scheduler started")
 
