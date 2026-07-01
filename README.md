@@ -40,7 +40,7 @@ Instead of manually exporting users from 15 different apps every quarter, RETINA
 - Python 3.9 or later
 - `uv` package manager (faster than pip — install with `pip install uv`)
 
-**Login:** RETINA requires authentication via Okta or Google. You'll need an OAuth app set up in one or both — see [Step 2a](#step-2a--configure-okta-or-google-oauth) below.
+**Login:** RETINA does not have its own login screen — it trusts an authenticating reverse proxy in front of it (Cloudflare Access, oauth2-proxy, nginx + `auth_request`, a corporate VPN gateway, etc.) that has already verified the user against Okta/Google and forwards their email in an HTTP header. If you don't already have one of these in front of your internal tools, see [Step 2a](#step-2a--put-an-authenticating-proxy-in-front-of-retina) below for the simplest option.
 
 **Credentials:** You'll add API credentials for each connected system through RETINA's web interface — not in a configuration file. RETINA encrypts all credentials immediately when you save them.
 
@@ -59,45 +59,27 @@ git clone https://github.com/DuuMayne/RETINA.git
 cd RETINA
 ```
 
-### Step 2a — Configure Okta or Google OAuth
+### Step 2a — Put an authenticating proxy in front of RETINA
 
-RETINA requires at least one OAuth provider configured before anyone can log in.
+RETINA has no login page of its own. It reads the logged-in user's email from an HTTP header and trusts whatever set that header — so it must only ever be reachable through something that has already authenticated the user against Okta or Google.
 
-**Option A: Okta**
+If you already put internal tools behind a VPN or an access proxy (Cloudflare Access, oauth2-proxy, Tailscale, an nginx `auth_request` gateway, etc.), just add RETINA to that same setup and configure it to forward the authenticated email as a header — e.g. Cloudflare Access sends `Cf-Access-Authenticated-User-Email` by default, which is what RETINA expects out of the box.
 
-1. In Okta Admin → **Applications** → **Create App Integration**
-2. Choose **OIDC - OpenID Connect** → **Web Application**
-3. Set **Sign-in redirect URI** to `http://your-host:8000/auth/callback`
-4. Set **Sign-out redirect URI** to `http://your-host:8000/login`
-5. Copy the **Client ID**, **Client Secret**, and your **Okta domain** (e.g. `yourorg.okta.com`)
-6. Assign the app to the users or groups who should have access
+If you don't have one yet, the fastest path is [Cloudflare Access](https://developers.cloudflare.com/cloudflare-one/applications/configure-apps/self-hosted-apps/) in front of `http://localhost:8000` (or your host), with Okta or Google configured as the identity provider in the Cloudflare Zero Trust dashboard. No changes to RETINA itself are required — it already reads Cloudflare's header by default.
 
-**Option B: Google**
-
-1. Go to [console.cloud.google.com](https://console.cloud.google.com) → **APIs & Services** → **Credentials**
-2. **Create Credentials** → **OAuth 2.0 Client ID** → **Web application**
-3. Add to **Authorized redirect URIs**: `http://your-host:8000/auth/google/callback`
-4. Copy the **Client ID** and **Client Secret**
-5. Ensure the **Google People API** is enabled in your project
-
-Both providers can be active at the same time. Users are identified by email address regardless of which they use to log in.
+**Never expose port 8000 directly to the internet or an untrusted network.** Without a proxy in front, anyone can set the identity header themselves and impersonate any user.
 
 ### Step 3 — Set environment variables
 
-Edit `docker-compose.yml` and fill in the values for the providers you configured:
+Edit `docker-compose.yml`:
 
 ```yaml
 environment:
   - RETINA_DATA_DIR=/app/data
-  - APP_BASE_URL=http://localhost:8000   # change to your actual host/domain
-  - OKTA_DOMAIN=yourorg.okta.com
-  - OKTA_CLIENT_ID=0oaxxxxxxxxxxxxxxxx
-  - OKTA_CLIENT_SECRET=xxxxxxxxxxxxxxxx
-  - GOOGLE_CLIENT_ID=xxxx.apps.googleusercontent.com
-  - GOOGLE_CLIENT_SECRET=GOCSPX-xxxxxxxx
+  - AUTH_EMAIL_HEADER=Cf-Access-Authenticated-User-Email   # change if your proxy uses a different header name
+  - AUTH_NAME_HEADER=                                       # optional — header carrying a display name, if your proxy sends one
+  - RETINA_ADMIN_EMAILS=                                     # optional — comma-separated list; first user becomes admin if left blank
 ```
-
-Leave any provider's fields blank if you're not using it. The session signing key is auto-generated on first startup and stored in the data volume — you don't need to set it manually.
 
 ### Step 4 — Start RETINA
 
@@ -108,9 +90,9 @@ docker compose up -d --build
 - **`--build`** — builds the image the first time (takes 2–3 minutes)
 - **`-d`** — runs in the background
 
-### Step 5 — Log in
+### Step 5 — Open RETINA through your proxy
 
-Go to **[http://localhost:8000](http://localhost:8000)** in any browser. You'll see the login screen. The first user to log in is automatically made an **admin**. Everyone who logs in after that gets the **reviewer** role.
+Go to whatever URL your proxy exposes for RETINA (not `http://host:8000` directly, unless your proxy *is* on that host/port). The first person to access it is automatically made an **admin**. Everyone after that gets the **reviewer** role, unless you set `RETINA_ADMIN_EMAILS`.
 
 **To stop:**
 ```bash
@@ -128,7 +110,7 @@ git pull
 docker compose up -d --build
 ```
 
-> **Important:** Before updating, back up the data volume containing your encryption key and session key. Without the encryption key, saved credentials cannot be decrypted. See [Security notes](#10-security-notes).
+> **Important:** Before updating, back up the data volume containing your encryption key. Without it, saved credentials cannot be decrypted. See [Security notes](#10-security-notes).
 
 ---
 
@@ -147,18 +129,15 @@ cd RETINA
 uv sync
 ```
 
-### Step 3 — Set environment variables
+### Step 3 — Set a dev identity
+
+Locally you won't have a proxy in front of RETINA, so set `DEV_USER_EMAIL` to simulate a logged-in user. **This variable must never be set in production** — it bypasses the identity header check entirely.
 
 ```bash
-export RETINA_DATA_DIR=./data
-export APP_BASE_URL=http://localhost:8000
-export OKTA_DOMAIN=yourorg.okta.com
-export OKTA_CLIENT_ID=your-client-id
-export OKTA_CLIENT_SECRET=your-client-secret
-# or for Google:
-export GOOGLE_CLIENT_ID=your-client-id
-export GOOGLE_CLIENT_SECRET=your-client-secret
+export DEV_USER_EMAIL=you@company.com
 ```
+
+`RETINA_DATA_DIR` defaults to `./data` (created automatically) if you don't set it.
 
 ### Step 4 — Start RETINA
 
@@ -247,7 +226,7 @@ RETINA identifies issues — it doesn't take action in external systems. For eac
 | **Admin** | Add/edit/delete connectors, manage schedules, view all data, flag/approve users, manage RETINA user roles |
 | **Reviewer** | View all connected system data, flag and approve users in access reviews, export review reports |
 
-The first user to log in becomes an admin. Admins can promote or demote other users.
+The first person to access RETINA becomes an admin (unless `RETINA_ADMIN_EMAILS` is set). Admins can promote or demote other users via `PUT /api/users/{id}`.
 
 ### Snapshots
 
@@ -257,9 +236,11 @@ Every sync creates a timestamped snapshot. The **History** view shows historical
 
 ## 7. Scheduling automatic syncs
 
-Set each connector to sync automatically so your data stays current between reviews. Scheduling is available via the API (there is no scheduling UI in the web interface).
+Set each connector to sync automatically so your data — and your snapshot history — stays current between reviews.
 
-Configure schedules using the scheduling API endpoints: **Hourly, Daily, Weekly, Monthly**, or a custom cron expression.
+Click **Schedule** on any connector card and choose a frequency: **Hourly, Every 6 hours, Daily, Weekly, Monthly**, or turn it off for manual-only syncs. Each scheduled run creates a new snapshot, which is what gives you point-in-time history in the **History** view.
+
+For a custom cron expression instead of a preset, use the API directly: `PUT /api/applications/{app_id}/schedule` with `{"schedule": "0 3 * * *", "enabled": true}`.
 
 **Recommended schedules:**
 - Identity providers (Okta, Google Workspace): Daily
@@ -323,17 +304,17 @@ SendGrid, Segment, HelloSign, Namecheap, Experian
 
 ## 10. Security notes
 
-**Authentication required.** RETINA uses Okta or Google OAuth for login. No one can access the application without authenticating through one of the configured providers. Access is controlled at the IdP level — deprovisioning a user in Okta or Google immediately blocks their login.
+**RETINA has no login of its own — it trusts your proxy.** It reads the authenticated user's email from an HTTP header (`Cf-Access-Authenticated-User-Email` by default) and never verifies who set that header. This means RETINA is only as secure as the reverse proxy or VPN in front of it. **Never expose it directly to the internet or an untrusted network** — anyone who can reach it directly could set that header themselves and impersonate any user, including an admin.
+
+**Deprovisioning is enforced upstream.** Because auth happens at the proxy, removing someone's access to RETINA is a matter of removing them from the Okta/Google group your proxy checks — RETINA doesn't need to be told separately. You can additionally deactivate a user inside RETINA (`PUT /api/users/{id}` with `is_active: false`) if you want a second layer of control.
 
 **Credentials are encrypted at rest.** RETINA generates a Fernet encryption key on first startup and uses it to encrypt all API credentials before writing them to the database. The key is stored at `{RETINA_DATA_DIR}/encryption.key` with restricted file permissions.
 
-**Session cookies are signed.** Login sessions use HMAC-SHA256 signed cookies. The signing key is auto-generated and stored at `{RETINA_DATA_DIR}/session.key`. You can set `SESSION_SECRET` as an environment variable instead if you prefer to manage it yourself.
-
-**Back up your data directory.** The `encryption.key` and `session.key` files must be backed up separately from the database. If you lose `encryption.key`, you cannot decrypt saved credentials and will need to re-enter them all.
+**Back up your data directory.** `encryption.key` and `retina.db` should be backed up together, ideally to a location separate from where they normally live. If you lose `encryption.key`, you cannot decrypt saved credentials and will need to re-enter them all.
 
 **Credentials are masked in the UI.** Once saved, API keys and secrets are shown only as `***` — they cannot be retrieved through the interface.
 
-**Audit log.** Every login, flag, and approval decision is recorded in an immutable audit log with the actor's email and timestamp. The log is included in the access review CSV export.
+**Audit log.** Every flag, approval, and resolution decision made in the Access Review page is recorded in an immutable audit log with the actor's email and timestamp. The log is included in the access review CSV export.
 
 ---
 
@@ -350,13 +331,16 @@ If `retina` isn't listed as `Up`:
 docker compose up -d
 ```
 
-### Login redirects back to the login page with no error
+### "No identity header found" error (401)
 
-The `OKTA_DOMAIN`, `OKTA_CLIENT_ID`, or `OKTA_CLIENT_SECRET` env vars are not set, or the redirect URI in Okta/Google doesn't match `APP_BASE_URL`. Confirm the callback URI in your OAuth app settings exactly matches `{APP_BASE_URL}/auth/callback` (Okta) or `{APP_BASE_URL}/auth/google/callback` (Google).
+RETINA didn't see the header it expects from your proxy. Check:
+- You're accessing RETINA *through* your proxy's URL, not hitting `host:8000` directly
+- `AUTH_EMAIL_HEADER` matches exactly what your proxy actually sends (check your proxy's docs/logs — header names are case-insensitive but must match)
+- The proxy is actually configured to protect this specific route/hostname
 
-### "Invalid state parameter" error after login
+### Everyone is getting the reviewer role, or the wrong person is admin
 
-The login flow was interrupted (browser back button, expired cookie, etc.). Go back to `/login` and try again. If it happens consistently, make sure `APP_BASE_URL` is set to the actual hostname users access — mismatched URLs cause the OAuth state cookie to fail.
+Set `RETINA_ADMIN_EMAILS` explicitly rather than relying on "first user becomes admin" — if multiple people accessed RETINA before you set this, the wrong person may have claimed the admin slot. Set the env var and restart; existing users' roles update automatically on their next request.
 
 ### A connector shows "Auth failed" after saving credentials
 
@@ -400,26 +384,18 @@ The Okta connector hasn't synced yet. Click **Pull Access** on your Okta connect
 
 | Variable | Default | Description |
 |---|---|---|
-| `RETINA_DATA_DIR` | `.` | Directory for database, encryption key, and session key |
-| `APP_BASE_URL` | `http://localhost:8000` | Public base URL — must match OAuth redirect URIs |
-| `OKTA_DOMAIN` | — | Your Okta org domain, e.g. `yourorg.okta.com` |
-| `OKTA_CLIENT_ID` | — | Okta OAuth app client ID |
-| `OKTA_CLIENT_SECRET` | — | Okta OAuth app client secret |
-| `GOOGLE_CLIENT_ID` | — | Google OAuth app client ID |
-| `GOOGLE_CLIENT_SECRET` | — | Google OAuth app client secret |
-| `SESSION_SECRET` | auto-generated | HMAC key for signing session cookies; auto-saved to `session.key` if not set |
+| `RETINA_DATA_DIR` | `./data` | Directory for the SQLite database and encryption key |
+| `AUTH_EMAIL_HEADER` | `Cf-Access-Authenticated-User-Email` | HTTP header your proxy uses to forward the authenticated user's email |
+| `AUTH_NAME_HEADER` | — | Optional header for the user's display name, if your proxy sends one |
+| `RETINA_ADMIN_EMAILS` | — | Comma-separated emails that get the admin role; first user becomes admin if unset |
+| `DEV_USER_EMAIL` | — | **Local dev only.** Bypasses the identity header check — never set in production |
 
 ### API endpoints
 
-All API endpoints require authentication. Endpoints that modify data (create/update/delete connectors, change schedules) require the **admin** role.
+All API endpoints require an identity header (or `DEV_USER_EMAIL` locally). Endpoints that modify data (create/update/delete connectors, change schedules) require the **admin** role.
 
 **Auth**
-- `GET /auth/login` — redirect to Okta
-- `GET /auth/callback` — Okta OAuth callback
-- `GET /auth/google/login` — redirect to Google
-- `GET /auth/google/callback` — Google OAuth callback
-- `GET /auth/logout` — clear session
-- `GET /auth/me` — current user info
+- `GET /auth/me` — current user info, as resolved from the identity header
 
 **Access Review**
 - `GET /api/review/users` — all latest-snapshot users with review status

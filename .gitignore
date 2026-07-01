@@ -15,6 +15,7 @@ wheels/
 encryption.key
 access_review.db
 retina.db
+/data/
 
 # macOS
 .DS_Store

@@ -3,7 +3,7 @@ from sqlalchemy import create_engine, Column, String, Text, DateTime, JSON
 from sqlalchemy.orm import declarative_base, sessionmaker
 from datetime import datetime, timezone
 
-DATA_DIR = os.environ.get("RETINA_DATA_DIR", ".")
+DATA_DIR = os.environ.get("RETINA_DATA_DIR", "./data")
 os.makedirs(DATA_DIR, exist_ok=True)
 
 engine = create_engine(f"sqlite:///{os.path.join(DATA_DIR, 'retina.db')}")
@@ -40,7 +40,6 @@ class RetinaUser(Base):
     id = Column(String, primary_key=True)
     email = Column(String, unique=True, nullable=False, index=True)
     name = Column(String, nullable=False)
-    okta_sub = Column(String, nullable=True)
     role = Column(String, default="reviewer")  # "admin" or "reviewer"
     is_active = Column(String, default="true")
     last_login = Column(DateTime, nullable=True)

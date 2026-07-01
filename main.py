@@ -1,12 +1,11 @@
 import io
 import csv
-import secrets
 import uuid
 from datetime import datetime, timezone
 from contextlib import asynccontextmanager
 
 from fastapi import FastAPI, Depends, HTTPException, Request
-from fastapi.responses import HTMLResponse, RedirectResponse, StreamingResponse
+from fastapi.responses import HTMLResponse, StreamingResponse
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 from sqlalchemy.orm import Session
@@ -22,12 +21,7 @@ from scheduler import (
     start_scheduler, stop_scheduler, schedule_app, unschedule_app,
     get_scheduled_jobs, SCHEDULE_PRESETS, sync_application_task,
 )
-from auth import (
-    get_session, require_auth, require_admin,
-    okta_authorize_url, okta_exchange_code,
-    google_authorize_url, google_exchange_code,
-    upsert_retina_user, make_session_cookie,
-)
+from auth import require_auth, require_admin
 
 
 @asynccontextmanager
@@ -43,121 +37,21 @@ app.mount("/static", StaticFiles(directory="static"), name="static")
 templates = Jinja2Templates(directory="templates")
 
 
-# ── Auth ──
-
-@app.get("/login", response_class=HTMLResponse)
-async def login_page(request: Request, error: str = None):
-    return templates.TemplateResponse("login.html", {"request": request, "error": error})
-
-
-@app.get("/auth/login")
-async def auth_login():
-    state = secrets.token_urlsafe(16)
-    resp = RedirectResponse(okta_authorize_url(state))
-    resp.set_cookie("okta_state", state, httponly=True, samesite="lax", max_age=600)
-    return resp
-
-
-@app.get("/auth/callback")
-async def auth_callback(
-    request: Request,
-    code: str = None,
-    state: str = None,
-    error: str = None,
-    error_description: str = None,
-    db: Session = Depends(get_db),
-):
-    if error:
-        return RedirectResponse(f"/login?error={error_description or error}")
-
-    expected = request.cookies.get("okta_state")
-    if not state or state != expected:
-        return RedirectResponse("/login?error=Invalid+state+parameter")
-
-    try:
-        userinfo = await okta_exchange_code(code)
-        user = upsert_retina_user(db, userinfo)
-    except Exception as e:
-        return RedirectResponse(f"/login?error={str(e)}")
-
-    resp = RedirectResponse("/")
-    resp.set_cookie(
-        "retina_session",
-        make_session_cookie(user.email, user.name, user.role),
-        httponly=True, samesite="lax", max_age=86400 * 7,
-    )
-    resp.delete_cookie("okta_state")
-    return resp
-
-
-@app.get("/auth/google/login")
-async def google_login():
-    state = secrets.token_urlsafe(16)
-    resp = RedirectResponse(google_authorize_url(state))
-    resp.set_cookie("okta_state", state, httponly=True, samesite="lax", max_age=600)
-    return resp
-
-
-@app.get("/auth/google/callback")
-async def google_callback(
-    request: Request,
-    code: str = None,
-    state: str = None,
-    error: str = None,
-    error_description: str = None,
-    db: Session = Depends(get_db),
-):
-    if error:
-        return RedirectResponse(f"/login?error={error_description or error}")
-
-    expected = request.cookies.get("okta_state")
-    if not state or state != expected:
-        return RedirectResponse("/login?error=Invalid+state+parameter")
-
-    try:
-        userinfo = await google_exchange_code(code)
-        user = upsert_retina_user(db, userinfo)
-    except Exception as e:
-        return RedirectResponse(f"/login?error={str(e)}")
-
-    resp = RedirectResponse("/")
-    resp.set_cookie(
-        "retina_session",
-        make_session_cookie(user.email, user.name, user.role),
-        httponly=True, samesite="lax", max_age=86400 * 7,
-    )
-    resp.delete_cookie("okta_state")
-    return resp
-
-
-@app.get("/auth/logout")
-async def auth_logout():
-    resp = RedirectResponse("/login")
-    resp.delete_cookie("retina_session")
-    return resp
-
-
 @app.get("/auth/me")
-async def auth_me(session: dict = Depends(require_auth)):
-    return session
+async def auth_me(user: dict = Depends(require_auth)):
+    return user
 
 
 # ── Pages ──
 
 @app.get("/", response_class=HTMLResponse)
-async def index(request: Request):
-    session = get_session(request)
-    if not session:
-        return RedirectResponse("/login")
-    return templates.TemplateResponse("index.html", {"request": request, "user": session})
+async def index(request: Request, user: dict = Depends(require_auth)):
+    return templates.TemplateResponse("index.html", {"request": request, "user": user})
 
 
 @app.get("/review", response_class=HTMLResponse)
-async def review_page(request: Request):
-    session = get_session(request)
-    if not session:
-        return RedirectResponse("/login")
-    return templates.TemplateResponse("review.html", {"request": request, "user": session})
+async def review_page(request: Request, user: dict = Depends(require_auth)):
+    return templates.TemplateResponse("review.html", {"request": request, "user": user})
 
 
 # ── API: Connector metadata ──

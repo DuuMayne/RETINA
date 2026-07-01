@@ -77,7 +77,6 @@
         .audit-action.flag    { background: rgba(255,77,106,0.15); color: var(--danger); }
         .audit-action.approve { background: rgba(52,211,153,0.15); color: var(--success); }
         .audit-action.resolve { background: rgba(108,124,255,0.12); color: var(--primary); }
-        .audit-action.login   { background: rgba(139,143,163,0.12); color: var(--text-muted); }
     </style>
 </head>
 <body>
@@ -90,7 +89,6 @@
         </div>
         <div class="nav-right">
             <span class="user-badge"><strong>{{ user.name }}</strong> &middot; {{ user.role }}</span>
-            <a href="/auth/logout" class="nav-link">Logout</a>
         </div>
     </nav>
 
@@ -162,7 +160,6 @@ async function api(method, url, body) {
     const opts = { method, headers: { 'Content-Type': 'application/json' } };
     if (body) opts.body = JSON.stringify(body);
     const res = await fetch(url, opts);
-    if (res.status === 401) { location.href = '/login'; return; }
     if (!res.ok) {
         const err = await res.json().catch(() => ({ detail: res.statusText }));
         throw new Error(err.detail || 'Request failed');

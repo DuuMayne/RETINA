@@ -2,6 +2,7 @@ const API = '';
 
 // ── State ──
 let apps = [];
+let schedules = {};
 let connectorMeta = {};
 let currentAppId = null;
 let currentUsers = [];
@@ -17,7 +18,6 @@ async function api(method, url, body) {
     const opts = { method, headers: { 'Content-Type': 'application/json' } };
     if (body) opts.body = JSON.stringify(body);
     const res = await fetch(API + url, opts);
-    if (res.status === 401) { location.href = '/login'; return; }
     if (!res.ok) {
         const err = await res.json().catch(() => ({ detail: res.statusText }));
         throw new Error(err.detail || 'Request failed');
@@ -28,7 +28,16 @@ async function api(method, url, body) {
 // ── Load apps ──
 async function loadApps() {
     apps = await api('GET', '/api/applications');
+    const scheduleList = await api('GET', '/api/schedules');
+    schedules = Object.fromEntries(scheduleList.map(s => [s.app_id, s]));
     renderApps();
+}
+
+function scheduleLabel(appId) {
+    const s = schedules[appId];
+    if (!s || !s.sync_enabled || !s.sync_schedule) return 'Manual sync only';
+    const labels = { hourly: 'Hourly', every_6_hours: 'Every 6 hours', daily: 'Daily', weekly: 'Weekly', monthly: 'Monthly' };
+    return 'Scheduled: ' + (labels[s.sync_schedule] || s.sync_schedule);
 }
 
 function renderApps() {
@@ -44,16 +53,47 @@ function renderApps() {
                 <div class="btn-group">
                     <button onclick="syncApp('${a.id}', this)">Pull Access</button>
                     <button class="secondary" onclick="viewSnapshots('${a.id}')">History</button>
+                    <button class="secondary" onclick="openScheduleModal('${a.id}')">Schedule</button>
                     <button class="secondary" onclick="openEditModal('${a.id}')">Edit</button>
                     <button class="danger" onclick="deleteApp('${a.id}')">Remove</button>
                 </div>
             </div>
             <div style="font-size:0.8rem;color:var(--text-muted)">
                 ${a.last_sync ? 'Last synced: ' + new Date(a.last_sync).toLocaleString() : 'Never synced'}
+                &middot; ${scheduleLabel(a.id)}
                 ${a.base_url ? ' &middot; ' + esc(a.base_url) : ''}
             </div>
         </div>
     `).join('');
+}
+
+// ── Schedule modal ──
+function openScheduleModal(appId) {
+    const app = apps.find(a => a.id === appId);
+    const current = schedules[appId];
+    document.getElementById('schedule-app-id').value = appId;
+    document.getElementById('schedule-app-name').textContent = app ? app.name : '';
+    document.getElementById('schedule-preset').value = (current && current.sync_enabled) ? (current.sync_schedule || '') : '';
+    document.getElementById('schedule-modal').classList.add('active');
+}
+
+function closeScheduleModal() {
+    document.getElementById('schedule-modal').classList.remove('active');
+}
+
+async function submitSchedule() {
+    const appId = document.getElementById('schedule-app-id').value;
+    const preset = document.getElementById('schedule-preset').value;
+    try {
+        await api('PUT', `/api/applications/${appId}/schedule`, {
+            schedule: preset,
+            enabled: !!preset,
+        });
+        closeScheduleModal();
+        await loadApps();
+    } catch (e) {
+        alert('Error: ' + e.message);
+    }
 }
 
 // ── Connector categories ──
