@@ -304,3 +304,45 @@ tr:last-child td { border-bottom: none; }
     padding-bottom: 0.5rem;
     border-bottom: 1px solid var(--border);
 }
+
+/* Test connection result */
+.test-result {
+    margin-top: 0.75rem;
+    padding: 0.75rem;
+    border-radius: 6px;
+    font-size: 0.85rem;
+    display: none;
+}
+
+.test-result.success {
+    display: block;
+    background: rgba(52, 211, 153, 0.1);
+    border: 1px solid rgba(52, 211, 153, 0.3);
+    color: var(--success);
+}
+
+.test-result.error {
+    display: block;
+    background: rgba(255, 77, 106, 0.1);
+    border: 1px solid rgba(255, 77, 106, 0.3);
+    color: var(--danger);
+}
+
+.test-result strong {
+    display: block;
+    font-weight: 600;
+}
+
+.test-result ul {
+    color: var(--text);
+}
+
+.test-result pre {
+    font-size: 0.7rem;
+    line-height: 1.4;
+    color: var(--text-muted);
+}
+
+:root {
+    --bg-secondary: #1a1d27;
+}

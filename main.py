@@ -82,6 +82,136 @@ async def list_connectors(session: dict = Depends(require_auth)):
     return result
 
 
+def diagnose_connector_error(e: Exception, connector_type: str) -> dict:
+    """Categorize and provide actionable guidance for connector errors."""
+    import httpx
+
+    error_msg = str(e)
+    error_type = type(e).__name__
+
+    # Network/connection errors
+    if isinstance(e, (httpx.ConnectError, httpx.TimeoutException)):
+        return {
+            "category": "network",
+            "title": "Connection Failed",
+            "message": f"Could not reach the API endpoint: {error_msg}",
+            "suggestions": [
+                "Verify the base URL is correct",
+                "Check if the service is currently available",
+                "Ensure your network allows outbound connections to this service",
+            ]
+        }
+
+    # Authentication errors
+    if isinstance(e, httpx.HTTPStatusError):
+        status = e.response.status_code
+        if status == 401:
+            return {
+                "category": "auth",
+                "title": "Authentication Failed",
+                "message": "The API rejected your credentials (401 Unauthorized)",
+                "suggestions": [
+                    "Verify your API token/key is correct and not expired",
+                    "Check if the token has been regenerated or revoked",
+                    "Ensure you're using the correct authentication format",
+                ]
+            }
+        elif status == 403:
+            return {
+                "category": "permissions",
+                "title": "Permission Denied",
+                "message": "Your credentials lack required permissions (403 Forbidden)",
+                "suggestions": [
+                    "Verify the API token has the necessary scopes/permissions",
+                    "Check if your account has admin access if required",
+                    "Review the connector documentation for required permissions",
+                ]
+            }
+        elif status == 404:
+            return {
+                "category": "endpoint",
+                "title": "Resource Not Found",
+                "message": f"The API endpoint was not found (404): {error_msg}",
+                "suggestions": [
+                    "Verify the base URL points to the correct API version",
+                    "Check if organization/domain name in credentials is correct",
+                    "Ensure the resource (org, workspace, etc.) exists",
+                ]
+            }
+        elif status >= 500:
+            return {
+                "category": "server",
+                "title": "Server Error",
+                "message": f"The remote API returned a server error ({status})",
+                "suggestions": [
+                    "The service may be experiencing an outage",
+                    "Try again in a few minutes",
+                    "Check the service status page if available",
+                ]
+            }
+
+    # Rate limiting
+    if "rate limit" in error_msg.lower() or "429" in error_msg:
+        return {
+            "category": "rate_limit",
+            "title": "Rate Limited",
+            "message": "Too many requests to the API",
+            "suggestions": [
+                "Wait a few minutes before trying again",
+                "Consider scheduling syncs less frequently",
+            ]
+        }
+
+    # Generic fallback
+    return {
+        "category": "unknown",
+        "title": "Connection Test Failed",
+        "message": f"{error_type}: {error_msg}",
+        "suggestions": [
+            "Review the full error message above",
+            "Check the connector documentation for setup requirements",
+            "Verify all credential fields are filled correctly",
+        ]
+    }
+
+
+@app.post("/api/connectors/test")
+async def test_connector(body: dict, session: dict = Depends(require_auth)):
+    """Test a connector configuration without saving it."""
+    connector_type = body.get("connector_type")
+    if not connector_type or connector_type not in CONNECTORS:
+        raise HTTPException(400, f"Invalid connector type: {connector_type}")
+
+    credentials = body.get("credentials", {})
+    base_url = body.get("base_url")
+
+    # Validate required fields
+    connector_cls = CONNECTORS[connector_type]
+    required_fields = connector_cls.credential_fields()
+    missing = [f["name"] for f in required_fields if not credentials.get(f["name"])]
+    if missing:
+        raise HTTPException(400, f"Missing required credentials: {', '.join(missing)}")
+
+    connector = get_connector(connector_type, credentials, base_url)
+
+    try:
+        # Attempt to fetch users (with a smaller limit if possible)
+        users = await connector.fetch_users()
+        return {
+            "success": True,
+            "message": f"Successfully connected and retrieved {len(users)} user(s)",
+            "user_count": len(users),
+            "sample_user": users[0] if users else None,
+        }
+    except Exception as e:
+        diagnosis = diagnose_connector_error(e, connector_type)
+        return {
+            "success": False,
+            **diagnosis,
+            "raw_error": str(e),
+        }
+
+
 # ── API: Applications CRUD ──
 
 @app.get("/api/applications")
@@ -180,7 +310,14 @@ async def sync_application(app_id: str, db: Session = Depends(get_db), session: 
     try:
         users = await connector.fetch_users()
     except Exception as e:
-        raise HTTPException(502, f"Sync failed: {e}")
+        diagnosis = diagnose_connector_error(e, a.connector_type)
+        raise HTTPException(
+            502,
+            detail={
+                "message": f"Sync failed: {diagnosis['title']}",
+                "diagnosis": diagnosis,
+            }
+        )
 
     snapshot = AccessSnapshot(
         id=str(uuid.uuid4()),

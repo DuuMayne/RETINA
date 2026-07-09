@@ -220,6 +220,69 @@ function selectConnector(type) {
     config.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
 }
 
+async function testConnection() {
+    if (!selectedConnectorType) return alert('Select a connector first');
+
+    const baseUrl = document.getElementById('base-url').value.trim();
+    const credentials = {};
+    document.querySelectorAll('#cred-fields input').forEach(inp => {
+        credentials[inp.name] = inp.value;
+    });
+
+    const testBtn = document.querySelector('#conn-config .test-btn');
+    const resultDiv = document.getElementById('test-result');
+
+    testBtn.disabled = true;
+    testBtn.innerHTML = '<span class="spinner"></span>Testing...';
+    resultDiv.innerHTML = '';
+    resultDiv.className = 'test-result';
+
+    try {
+        const resp = await fetch(API + '/api/connectors/test', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                connector_type: selectedConnectorType,
+                credentials,
+                base_url: baseUrl || null,
+            })
+        });
+        const result = await resp.json();
+
+        if (result.success) {
+            resultDiv.className = 'test-result success';
+            resultDiv.innerHTML = `
+                <strong>✓ ${esc(result.message)}</strong>
+                ${result.sample_user ? `<div style="font-size:0.85rem;margin-top:0.25rem">Sample: ${esc(result.sample_user.name || result.sample_user.email || result.sample_user.id)}</div>` : ''}
+            `;
+        } else {
+            resultDiv.className = 'test-result error';
+            resultDiv.innerHTML = `
+                <strong>✗ ${esc(result.title)}</strong>
+                <div style="margin-top:0.5rem">${esc(result.message)}</div>
+                ${result.suggestions && result.suggestions.length ? `
+                    <div style="margin-top:0.5rem;font-size:0.85rem">
+                        <strong>Suggestions:</strong>
+                        <ul style="margin:0.25rem 0 0 1.25rem;padding:0">
+                            ${result.suggestions.map(s => `<li>${esc(s)}</li>`).join('')}
+                        </ul>
+                    </div>
+                ` : ''}
+                <details style="margin-top:0.5rem;font-size:0.75rem">
+                    <summary style="cursor:pointer;color:var(--text-muted)">Technical details</summary>
+                    <pre style="margin-top:0.25rem;padding:0.5rem;background:var(--bg-secondary);border-radius:4px;overflow-x:auto">${esc(result.raw_error)}</pre>
+                </details>
+            `;
+        }
+    } catch (e) {
+        resultDiv.className = 'test-result error';
+        resultDiv.innerHTML = `<strong>✗ Test Failed</strong><div style="margin-top:0.5rem">${esc(e.message)}</div>`;
+    } finally {
+        testBtn.disabled = false;
+        testBtn.textContent = 'Test Connection';
+    }
+}
+
 async function submitAddApp() {
     const name = document.getElementById('app-name').value.trim();
     const baseUrl = document.getElementById('base-url').value.trim();
@@ -252,7 +315,22 @@ async function syncApp(appId, btn) {
         showUsersPanel(apps.find(a => a.id === appId)?.name || 'App');
         await loadApps();
     } catch (e) {
-        alert('Sync failed: ' + e.message);
+        // Try to extract diagnosis from error detail
+        let message = e.message;
+        try {
+            const resp = await fetch(API + `/api/applications/${appId}/sync`, { method: 'POST' });
+            if (!resp.ok) {
+                const detail = await resp.json().catch(() => null);
+                if (detail && detail.detail && detail.detail.diagnosis) {
+                    const diag = detail.detail.diagnosis;
+                    message = `${diag.title}\n\n${diag.message}`;
+                    if (diag.suggestions && diag.suggestions.length) {
+                        message += '\n\nSuggestions:\n' + diag.suggestions.map(s => '• ' + s).join('\n');
+                    }
+                }
+            }
+        } catch {}
+        alert('Sync failed:\n\n' + message);
     } finally {
         btn.disabled = false;
         btn.textContent = 'Pull Access';
@@ -367,6 +445,71 @@ async function openEditModal(appId) {
 
 function closeEditModal() {
     document.getElementById('edit-modal').classList.remove('active');
+}
+
+async function testEditConnection() {
+    const appId = document.getElementById('edit-app-id').value;
+    const app = apps.find(a => a.id === appId);
+    if (!app) return alert('Application not found');
+
+    const baseUrl = document.getElementById('edit-base-url').value.trim();
+    const credentials = {};
+    document.querySelectorAll('#edit-cred-fields input').forEach(inp => {
+        credentials[inp.name] = inp.value;
+    });
+
+    const testBtn = document.querySelector('#edit-modal .test-btn');
+    const resultDiv = document.getElementById('edit-test-result');
+
+    testBtn.disabled = true;
+    testBtn.innerHTML = '<span class="spinner"></span>Testing...';
+    resultDiv.innerHTML = '';
+    resultDiv.className = 'test-result';
+
+    try {
+        const resp = await fetch(API + '/api/connectors/test', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                connector_type: app.connector_type,
+                credentials,
+                base_url: baseUrl || null,
+            })
+        });
+        const result = await resp.json();
+
+        if (result.success) {
+            resultDiv.className = 'test-result success';
+            resultDiv.innerHTML = `
+                <strong>✓ ${esc(result.message)}</strong>
+                ${result.sample_user ? `<div style="font-size:0.85rem;margin-top:0.25rem">Sample: ${esc(result.sample_user.name || result.sample_user.email || result.sample_user.id)}</div>` : ''}
+            `;
+        } else {
+            resultDiv.className = 'test-result error';
+            resultDiv.innerHTML = `
+                <strong>✗ ${esc(result.title)}</strong>
+                <div style="margin-top:0.5rem">${esc(result.message)}</div>
+                ${result.suggestions && result.suggestions.length ? `
+                    <div style="margin-top:0.5rem;font-size:0.85rem">
+                        <strong>Suggestions:</strong>
+                        <ul style="margin:0.25rem 0 0 1.25rem;padding:0">
+                            ${result.suggestions.map(s => `<li>${esc(s)}</li>`).join('')}
+                        </ul>
+                    </div>
+                ` : ''}
+                <details style="margin-top:0.5rem;font-size:0.75rem">
+                    <summary style="cursor:pointer;color:var(--text-muted)">Technical details</summary>
+                    <pre style="margin-top:0.25rem;padding:0.5rem;background:var(--bg-secondary);border-radius:4px;overflow-x:auto">${esc(result.raw_error)}</pre>
+                </details>
+            `;
+        }
+    } catch (e) {
+        resultDiv.className = 'test-result error';
+        resultDiv.innerHTML = `<strong>✗ Test Failed</strong><div style="margin-top:0.5rem">${esc(e.message)}</div>`;
+    } finally {
+        testBtn.disabled = false;
+        testBtn.textContent = 'Test Connection';
+    }
 }
 
 async function submitEditApp() {
