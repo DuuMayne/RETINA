@@ -58,7 +58,8 @@ class GitHubConnector(BaseConnector):
                     headers=headers,
                     params={"per_page": 100, "page": page},
                 )
-                resp.raise_for_status()
+                if resp.status_code >= 400:
+                    raise RuntimeError(f"GitHub API error {resp.status_code} on /orgs/{org}/members: {resp.text}")
                 members = resp.json()
                 if not members:
                     break
@@ -69,7 +70,8 @@ class GitHubConnector(BaseConnector):
                         f"{base}/orgs/{org}/memberships/{member['login']}",
                         headers=headers,
                     )
-                    mem_resp.raise_for_status()
+                    if mem_resp.status_code >= 400:
+                        raise RuntimeError(f"GitHub API error {mem_resp.status_code} on /orgs/{org}/memberships/{member['login']}: {mem_resp.text}")
                     membership = mem_resp.json()
 
                     results.append({

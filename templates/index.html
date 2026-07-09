@@ -58,6 +58,10 @@
                     </div>
                 </div>
                 <div id="cred-fields" class="form-row"></div>
+                <div style="margin-bottom:1rem">
+                    <button type="button" class="secondary test-btn" onclick="testConnection()">Test Connection</button>
+                    <div id="test-result" class="test-result"></div>
+                </div>
                 <div class="actions">
                     <button class="secondary" onclick="closeAddModal()">Cancel</button>
                     <button onclick="submitAddApp()">Save</button>
@@ -116,6 +120,10 @@
             </div>
             <div id="edit-cred-fields" class="form-row"></div>
             <div style="font-size:0.75rem;color:var(--text-muted);margin-top:0.25rem">Credentials are masked. Leave as-is to keep current values, or paste new ones to update.</div>
+            <div style="margin-bottom:1rem">
+                <button type="button" class="secondary test-btn" onclick="testEditConnection()">Test Connection</button>
+                <div id="edit-test-result" class="test-result"></div>
+            </div>
             <div class="actions">
                 <button class="secondary" onclick="closeEditModal()">Cancel</button>
                 <button onclick="submitEditApp()">Update</button>
